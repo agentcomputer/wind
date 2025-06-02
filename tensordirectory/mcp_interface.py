@@ -9,11 +9,26 @@ and the `agent` module for AI-driven query handling.
 # mcp_interface.py
 
 # Ensure these dependencies are available in your environment:
-# pip install modelcontextprotocol numpy h5py
+# pip install modelcontextprotocol numpy h5py pydantic
 
 from mcp.server.fastmcp import FastMCP, Context
 import numpy as np
 from tensordirectory import storage # Assuming storage.py is in a package named tensordirectory
+from pydantic import BaseModel
+from typing import Optional, List # List is used for more specific typing if needed, Optional for optional fields.
+
+# Pydantic Models for Request Body Validation
+class TensorUploadRequest(BaseModel):
+    name: str
+    description: str
+    tensor_data: list # Using Python's built-in list type as per plan; can be List[any] essentially.
+                      # For more specific structures like a 2D list of floats: List[List[float]]
+
+class ModelUploadRequest(BaseModel):
+    name: str
+    description: str
+    model_weights: Optional[list] = None # Using Python's built-in list type.
+    model_code: Optional[str] = None
 
 # Initialize MCP Server
 mcp_server = FastMCP(
@@ -41,79 +56,96 @@ async def invoke_agent_query(prompt: str, params: dict | None, ctx: Context) -> 
 
 
 @mcp_server.resource("tensordirectory://tensors/upload")
-async def upload_tensor_resource(name: str, description: str, tensor_data: list, ctx: Context) -> dict:
+async def upload_tensor_resource(data: TensorUploadRequest, ctx: Context) -> dict:
     """
     MCP Resource handler for uploading a new tensor.
 
     Args:
-        name: User-defined name for the tensor.
-        description: Textual description of the tensor.
-        tensor_data: The tensor data, as a list (convertible to NumPy array).
+        data: A TensorUploadRequest Pydantic model instance containing 'name', 
+              'description', and 'tensor_data'.
         ctx: The MCP Context object.
 
     Returns:
         A dictionary with operation status, UUID of the saved tensor, and name.
     """
+    # Parameters are now accessed as attributes from the Pydantic model 'data'
+    # Pydantic performs validation for presence and basic type of name, description, tensor_data.
+    name = data.name
+    description = data.description
+    tensor_data_list = data.tensor_data 
+
     await ctx.log_info(f"Attempting to upload tensor: {name}")
     try:
-        # Basic validation for tensor_data
-        if not isinstance(tensor_data, list) or not tensor_data:
-            return {"error": "tensor_data must be a non-empty list"}
+        # Pydantic ensures tensor_data_list is a list.
+        # Still, we might want to check if it's an empty list if that's not allowed.
+        if not tensor_data_list: 
+            await ctx.log_error(f"tensor_data for '{name}' must be a non-empty list.")
+            return {"error": f"tensor_data for '{name}' must be a non-empty list."}
         
-        arr = np.array(tensor_data)
-        # Further validation can be added here (e.g., check dimensions, type)
+        arr = np.array(tensor_data_list)
+        # Further validation can be added here (e.g., check dimensions, specific dtype compatibility)
         
-        uuid = storage.save_tensor(name=name, description=description, tensor_data=arr)
-        if uuid:
-            await ctx.log_info(f"Tensor '{name}' saved with UUID: {uuid}")
-            return {"uuid": uuid, "name": name, "message": "Tensor uploaded successfully"}
+        tensor_uuid = storage.save_tensor(name=name, description=description, tensor_data=arr)
+        if tensor_uuid:
+            await ctx.log_info(f"Tensor '{name}' saved with UUID: {tensor_uuid}")
+            return {"uuid": tensor_uuid, "name": name, "message": "Tensor uploaded successfully"}
         else:
             await ctx.log_error(f"Failed to save tensor '{name}' - storage returned no UUID")
             return {"error": f"Failed to save tensor '{name}'"}
-    except ValueError as ve:
-        await ctx.log_error(f"ValueError during tensor conversion for '{name}': {ve}")
+    except ValueError as ve: # Handles errors from np.array conversion if data is malformed for numpy
+        await ctx.log_error(f"ValueError during tensor conversion for '{name}': {ve}", exc_info=True)
         return {"error": f"Invalid tensor data format for '{name}': {ve}"}
-    except Exception as e:
+    except Exception as e: # Catch-all for other unexpected errors during storage or processing
         await ctx.log_error(f"Exception uploading tensor '{name}': {e}", exc_info=True)
         return {"error": f"An unexpected error occurred while uploading tensor '{name}': {str(e)}"}
 
 @mcp_server.resource("tensordirectory://models/upload")
-async def upload_model_resource(name: str, description: str, ctx: Context, model_weights: list | None = None, model_code: str | None = None) -> dict:
+async def upload_model_resource(data: ModelUploadRequest, ctx: Context) -> dict:
     """
     MCP Resource handler for uploading a new model (code, weights, or both).
 
     Args:
-        name: User-defined name for the model.
-        description: Textual description of the model.
-        model_weights: Optional list representing model weights (convertible to NumPy array).
-        model_code: Optional string containing Python code for the model.
+        data: A ModelUploadRequest Pydantic model instance containing 'name', 
+              'description', and optionally 'model_weights' and/or 'model_code'.
         ctx: The MCP Context object.
 
     Returns:
         A dictionary with operation status, UUID of the saved model, and name.
     """
+    # Required fields are validated by Pydantic.
+    # Optional fields will be None if not provided.
+    name = data.name
+    description = data.description
+    model_weights_list = data.model_weights 
+    model_code = data.model_code
+
     await ctx.log_info(f"Attempting to upload model: {name}")
     try:
-        if model_weights is None and model_code is None:
+        if model_weights_list is None and model_code is None:
+            # This check remains important as both are optional in the Pydantic model,
+            # but the application requires at least one.
+            await ctx.log_error(f"Validation error for model '{name}': Either model_weights or model_code must be provided.")
             return {"error": "Either model_weights or model_code must be provided."}
 
         np_weights = None
-        if model_weights:
-            if not isinstance(model_weights, list): # Basic validation
-                 return {"error": "model_weights must be a list if provided"}
-            np_weights = np.array(model_weights)
+        if model_weights_list is not None: # Check if model_weights_list was provided
+            # Pydantic ensures model_weights_list is a list if provided.
+            # An empty list for weights might be valid (e.g. representing no weights explicitly)
+            # or could be an error depending on deeper application logic.
+            # For now, if it's an empty list, np.array([]) is valid.
+            np_weights = np.array(model_weights_list)
 
-        uuid = storage.save_model(name=name, description=description, model_weights=np_weights, model_code=model_code)
-        if uuid:
-            await ctx.log_info(f"Model '{name}' saved with UUID: {uuid}")
-            return {"uuid": uuid, "name": name, "message": "Model uploaded successfully"}
+        model_uuid = storage.save_model(name=name, description=description, model_weights=np_weights, model_code=model_code)
+        if model_uuid:
+            await ctx.log_info(f"Model '{name}' saved with UUID: {model_uuid}")
+            return {"uuid": model_uuid, "name": name, "message": "Model uploaded successfully"}
         else:
             await ctx.log_error(f"Failed to save model '{name}' - storage returned no UUID")
             return {"error": f"Failed to save model '{name}'"}
-    except ValueError as ve:
-        await ctx.log_error(f"ValueError during model weights conversion for '{name}': {ve}")
+    except ValueError as ve: # Handles errors from np.array conversion if data is malformed
+        await ctx.log_error(f"ValueError during model weights conversion for '{name}': {ve}", exc_info=True)
         return {"error": f"Invalid model_weights data format for '{name}': {ve}"}
-    except Exception as e:
+    except Exception as e: # Catch-all for other unexpected errors
         await ctx.log_error(f"Exception uploading model '{name}': {e}", exc_info=True)
         return {"error": f"An unexpected error occurred while uploading model '{name}': {str(e)}"}
 
