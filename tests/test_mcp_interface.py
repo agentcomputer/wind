@@ -33,9 +33,11 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
         tensor_list_data = [[1, 2], [3, 4]]
         response = await upload_tensor_resource(
-            name="test_tensor",
-            description="A test tensor",
-            tensor_data=tensor_list_data,
+            data={
+                "name": "test_tensor",
+                "description": "A test tensor",
+                "tensor_data": tensor_list_data
+            },
             ctx=mock_ctx
         )
 
@@ -58,7 +60,10 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_info = AsyncMock()
         mock_ctx.log_error = AsyncMock() # This might be called by the handler
 
-        response = await upload_tensor_resource(name="invalid_tensor", description="Invalid", tensor_data=[], ctx=mock_ctx)
+        response = await upload_tensor_resource(
+            data={"name": "invalid_tensor", "description": "Invalid", "tensor_data": []},
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "tensor_data must be a non-empty list")
         mock_save_tensor.assert_not_called()
@@ -72,19 +77,40 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_info = AsyncMock()
         mock_ctx.log_error = AsyncMock()
 
-        response = await upload_tensor_resource(name="invalid_tensor_type", description="Invalid type", tensor_data="not a list", ctx=mock_ctx)
+        response = await upload_tensor_resource(
+            data={"name": "invalid_tensor_type", "description": "Invalid type", "tensor_data": "not a list"},
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "tensor_data must be a non-empty list") # Current check is basic
         mock_save_tensor.assert_not_called()
 
+    @patch('tensordirectory.mcp_interface.storage.save_tensor', new_callable=MagicMock)
+    async def test_03c_upload_tensor_resource_missing_keys(self, mock_save_tensor):
+        mock_ctx = MagicMock(spec=Context)
+        mock_ctx.log_info = AsyncMock() # For the initial attempt log, if any before key check
+        mock_ctx.log_error = AsyncMock()
+        response = await upload_tensor_resource(
+            data={"name": "missing_desc"}, # Missing 'description' and 'tensor_data'
+            ctx=mock_ctx
+        )
+        self.assertIn("error", response)
+        self.assertTrue(response["error"].startswith("Missing required field:"))
+        self.assertIn("'description'", response["error"]) # Check which key is reported missing
+        mock_save_tensor.assert_not_called()
+        mock_ctx.log_error.assert_called_once() # Should be called for missing key
 
-    @patch('tensordirectory.mcp_interface.storage.save_tensor', return_value=None) 
+
+    @patch('tensordirectory.mcp_interface.storage.save_tensor', return_value=None)
     async def test_04_upload_tensor_resource_storage_failure(self, mock_save_tensor_failure):
         mock_ctx = MagicMock(spec=Context)
         mock_ctx.log_info = AsyncMock()
         mock_ctx.log_error = AsyncMock()
 
-        response = await upload_tensor_resource(name="fail_tensor", description="Fail save", tensor_data=[[1]], ctx=mock_ctx)
+        response = await upload_tensor_resource(
+            data={"name": "fail_tensor", "description": "Fail save", "tensor_data": [[1]]},
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save tensor 'fail_tensor'")
         mock_save_tensor_failure.assert_called_once()
@@ -100,7 +126,12 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_error = AsyncMock()
 
         response = await upload_model_resource(
-            name="code_model", description="Code only", model_code="print('hi')", model_weights=None, ctx=mock_ctx
+            data={
+                "name": "code_model",
+                "description": "Code only",
+                "model_code": "print('hi')"
+            },
+            ctx=mock_ctx
         )
         mock_save_model.assert_called_once_with(name="code_model", description="Code only", model_weights=None, model_code="print('hi')")
         self.assertEqual(response, {"uuid": mock_uuid, "name": "code_model", "message": "Model uploaded successfully"})
@@ -118,7 +149,12 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
         weights_list = [[1.0, 2.0], [3.0, 4.0]]
         response = await upload_model_resource(
-            name="weights_model", description="Weights only", model_weights=weights_list, model_code=None, ctx=mock_ctx
+            data={
+                "name": "weights_model",
+                "description": "Weights only",
+                "model_weights": weights_list
+            },
+            ctx=mock_ctx
         )
         
         args, kwargs = mock_save_model.call_args_list[0]
@@ -139,7 +175,13 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         weights_list = [[1.0, 2.0]]
         code_str = "def predict(): pass"
         response = await upload_model_resource(
-            name="cw_model", description="Code & Weights", model_weights=weights_list, model_code=code_str, ctx=mock_ctx
+            data={
+                "name": "cw_model",
+                "description": "Code & Weights",
+                "model_weights": weights_list,
+                "model_code": code_str
+            },
+            ctx=mock_ctx
         )
         
         args, kwargs = mock_save_model.call_args_list[0]
@@ -156,7 +198,10 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_info = AsyncMock() 
         mock_ctx.log_error = AsyncMock()
         
-        response = await upload_model_resource(name="empty_model", description="Empty", ctx=mock_ctx)
+        response = await upload_model_resource(
+            data={"name": "empty_model", "description": "Empty"}, # No model_code or model_weights
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Either model_weights or model_code must be provided.")
         mock_save_model.assert_not_called()
@@ -169,7 +214,14 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_info = AsyncMock()
         mock_ctx.log_error = AsyncMock()
 
-        response = await upload_model_resource(name="invalid_weights_model", description="Test", model_weights="not a list", ctx=mock_ctx)
+        response = await upload_model_resource(
+            data={
+                "name": "invalid_weights_model",
+                "description": "Test",
+                "model_weights": "not a list"
+            },
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "model_weights must be a list if provided")
         mock_save_model.assert_not_called()
@@ -180,14 +232,36 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_ctx.log_info = AsyncMock()
         mock_ctx.log_error = AsyncMock()
 
-        response = await upload_model_resource(name="fail_model", description="Will fail", model_code="pass", ctx=mock_ctx)
+        response = await upload_model_resource(
+            data={
+                "name": "fail_model",
+                "description": "Will fail",
+                "model_code": "pass"
+            },
+            ctx=mock_ctx
+        )
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save model 'fail_model'")
         mock_save_model.assert_called_once()
         mock_ctx.log_error.assert_called_with("Failed to save model 'fail_model' - storage returned no UUID")
 
+    @patch('tensordirectory.mcp_interface.storage.save_model', new_callable=MagicMock)
+    async def test_07d_upload_model_resource_missing_keys(self, mock_save_model):
+        mock_ctx = MagicMock(spec=Context)
+        mock_ctx.log_info = AsyncMock() # For initial attempt log
+        mock_ctx.log_error = AsyncMock()
+        response = await upload_model_resource(
+            data={"name": "model_missing_desc"}, # Missing 'description'
+            ctx=mock_ctx
+        )
+        self.assertIn("error", response)
+        self.assertTrue(response["error"].startswith("Missing required field:"))
+        self.assertIn("'description'", response["error"])
+        mock_save_model.assert_not_called()
+        mock_ctx.log_error.assert_called_once()
 
-    @patch('tensordirectory.mcp_interface.invoke_agent_query', new_callable=AsyncMock) 
+
+    @patch('tensordirectory.mcp_interface.invoke_agent_query', new_callable=AsyncMock)
     async def test_08_query_tensor_directory_tool(self, mock_invoke_agent_query):
         mock_agent_response = "Agent says hello!"
         mock_invoke_agent_query.return_value = mock_agent_response
