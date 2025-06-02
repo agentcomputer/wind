@@ -78,7 +78,7 @@ async def upload_tensor_resource(name: str, description: str, tensor_data: list,
         return {"error": f"An unexpected error occurred while uploading tensor '{name}': {str(e)}"}
 
 @mcp_server.resource("tensordirectory://models/upload")
-async def upload_model_resource(name: str, description: str, model_weights: list | None = None, model_code: str | None = None, ctx: Context) -> dict:
+async def upload_model_resource(name: str, description: str, ctx: Context, model_weights: list | None = None, model_code: str | None = None) -> dict:
     """
     MCP Resource handler for uploading a new model (code, weights, or both).
 
