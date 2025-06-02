@@ -42,7 +42,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             description="A test tensor",
             tensor_data=tensor_list_data
         )
-        response = await upload_tensor_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
 
         mock_save_tensor.assert_called_once()
         args, kwargs = mock_save_tensor.call_args_list[0] # Get the first call's arguments
@@ -60,7 +60,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     @patch('tensordirectory.mcp_interface.storage.save_tensor', new_callable=MagicMock)
     async def test_03_upload_tensor_resource_invalid_data_empty(self, mock_save_tensor):
         request_data = TensorUploadRequest(name="invalid_tensor", description="Invalid", tensor_data=[])
-        response = await upload_tensor_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
         
         self.assertIn("error", response)
         # The error message comes from within the handler after Pydantic validation passes for `list` type
@@ -81,7 +81,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         # Mock save_tensor to do nothing as it won't be reached if np.array fails
         # or if it's reached, we don't care about its return for this test.
         
-        response = await upload_tensor_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
         
         self.assertIn("error", response)
         self.assertTrue(response["error"].startswith("Invalid tensor data format for 'value_error_tensor':"))
@@ -97,7 +97,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     @patch('tensordirectory.mcp_interface.storage.save_tensor', return_value=None)
     async def test_04_upload_tensor_resource_storage_failure(self, mock_save_tensor_failure):
         request_data = TensorUploadRequest(name="fail_tensor", description="Fail save", tensor_data=[[1]])
-        response = await upload_tensor_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
         
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save tensor 'fail_tensor'")
@@ -115,7 +115,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             description="Code only", 
             model_code="print('hi')"
         )
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
         
         mock_save_model.assert_called_once_with(name="code_model", description="Code only", model_weights=None, model_code="print('hi')")
         self.assertEqual(response, {"uuid": mock_uuid, "name": "code_model", "message": "Model uploaded successfully"})
@@ -134,7 +134,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             description="Weights only", 
             model_weights=weights_list
         )
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
         
         args, kwargs = mock_save_model.call_args_list[0]
         self.assertIsInstance(kwargs['model_weights'], np.ndarray)
@@ -160,7 +160,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             model_weights=weights_list_for_cw, 
             model_code=code_str
         )
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
         
         args, kwargs = mock_save_model.call_args_list[0]
         self.assertIsInstance(kwargs['model_weights'], np.ndarray)
@@ -172,12 +172,9 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
     @patch('tensordirectory.mcp_interface.storage.save_model', new_callable=MagicMock)
     async def test_07_upload_model_resource_no_code_no_weights(self, mock_save_model):
-        mock_ctx = MagicMock(spec=Context)
-        mock_ctx.log_info = AsyncMock() 
-        mock_ctx.log_error = AsyncMock()
-        
+        # self.mock_ctx is used from setUp
         request_data = ModelUploadRequest(name="empty_model", description="Empty") # No model_code or model_weights
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
         
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Either model_weights or model_code must be provided.")
@@ -195,7 +192,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             description="Test numpy conversion error", 
             model_weights=[["a", "b"], [1,2]] # This should cause np.array to fail
         )
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
 
         self.assertIn("error", response)
         self.assertTrue(response["error"].startswith("Invalid model_weights data format for 'invalid_weights_model':"))
@@ -212,7 +209,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
             description="Will fail", 
             model_code="pass"
         )
-        response = await upload_model_resource(data=request_data, ctx=self.mock_ctx)
+        response = await upload_model_resource(self.mock_ctx, data=request_data)
 
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save model 'fail_model'")

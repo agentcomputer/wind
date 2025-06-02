@@ -56,7 +56,7 @@ async def invoke_agent_query(prompt: str, params: dict | None, ctx: Context) -> 
 
 
 @mcp_server.resource("tensordirectory://tensors/upload")
-async def upload_tensor_resource(data: TensorUploadRequest, ctx: Context) -> dict:
+async def upload_tensor_resource(ctx: Context, data: TensorUploadRequest) -> dict:
     """
     MCP Resource handler for uploading a new tensor.
 
@@ -100,7 +100,7 @@ async def upload_tensor_resource(data: TensorUploadRequest, ctx: Context) -> dic
         return {"error": f"An unexpected error occurred while uploading tensor '{name}': {str(e)}"}
 
 @mcp_server.resource("tensordirectory://models/upload")
-async def upload_model_resource(data: ModelUploadRequest, ctx: Context) -> dict:
+async def upload_model_resource(ctx: Context, data: ModelUploadRequest) -> dict:
     """
     MCP Resource handler for uploading a new model (code, weights, or both).
 
