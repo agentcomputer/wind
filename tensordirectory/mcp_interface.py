@@ -118,7 +118,7 @@ async def upload_model_resource(name: str, description: str, ctx: Context, model
         return {"error": f"An unexpected error occurred while uploading model '{name}': {str(e)}"}
 
 @mcp_server.tool()
-async def query_tensor_directory(prompt: str, params: dict | None = None, ctx: Context) -> str:
+async def query_tensor_directory(prompt: str, ctx: Context, params: dict | None = None) -> str:
     """
     Processes a user's prompt to query the tensor directory.
     The AI agent will interpret the prompt, retrieve data, or use an inference model.
