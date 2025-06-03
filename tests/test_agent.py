@@ -51,32 +51,28 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         self.mock_ctx.log_warning = AsyncMock()
 
 
-    @patch('tensordirectory.agent.os.getenv')
     @patch('tensordirectory.agent.genai.configure')
-    @patch('tensordirectory.agent.genai.GenerativeModel') # Patch the class
-    def test_01_ensure_gemini_configured_success(self, mock_gen_model_constructor, mock_genai_configure, mock_getenv):
-        mock_getenv.return_value = "fake_api_key"
-        # Ensure gemini_model is None before the call, so configuration proceeds.
+    @patch('tensordirectory.agent.genai.GenerativeModel')
+    def test_01_ensure_gemini_configured_success(self, mock_gen_model_constructor, mock_genai_configure):
+        # Ensure agent.gemini_model is reset for the test
         agent.gemini_model = None
 
-        # Have the constructor return our specific mock instance
-        mock_model_instance = MockGenerativeModel()
+        mock_model_instance = MockGenerativeModel() # Assuming MockGenerativeModel is defined
         mock_gen_model_constructor.return_value = mock_model_instance
 
-        ensure_gemini_configured()
-
-        mock_getenv.assert_called_with("GEMINI_API_KEY")
-        mock_genai_configure.assert_called_with(api_key="fake_api_key")
-        mock_gen_model_constructor.assert_called_with('gemini-pro')
-        self.assertIs(agent.gemini_model, mock_model_instance) # Check if the global is set
-
-    @patch('tensordirectory.agent.os.getenv', return_value=None)
-    def test_02_ensure_gemini_configured_no_api_key(self, mock_getenv):
-        agent.gemini_model = None
-        with self.assertRaisesRegex(ValueError, "GEMINI_API_KEY not configured"):
+        with patch.object(agent, 'GEMINI_API_KEY', "fake_api_key_for_test"):
             ensure_gemini_configured()
-        mock_getenv.assert_called_with("GEMINI_API_KEY")
-        self.assertIsNone(agent.gemini_model)
+
+        mock_genai_configure.assert_called_with(api_key="fake_api_key_for_test")
+        mock_gen_model_constructor.assert_called_with('gemini-pro') # Or the actual model string
+        self.assertIs(agent.gemini_model, mock_model_instance)
+
+    def test_02_ensure_gemini_configured_no_api_key(self):
+        agent.gemini_model = None # Reset for the test
+        with patch.object(agent, 'GEMINI_API_KEY', None):
+            with self.assertRaisesRegex(ValueError, "GEMINI_API_KEY not configured"):
+                ensure_gemini_configured()
+        self.assertIsNone(agent.gemini_model) # Should remain None if config failed
 
 
     # Tests for analyze_prompt_with_gemini
@@ -192,10 +188,13 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         mock_get_input_tensor.assert_called_once_with("in1")
         mock_save_tensor.assert_called_once()
 
-        # Check the saved tensor data (args_save is a tuple, 0: name, 1: desc, 2: data)
-        saved_call_args = mock_save_tensor.call_args[0]
-        self.assertEqual(saved_call_args[0], "out1")
-        np.testing.assert_array_equal(saved_call_args[2], np.array([20, 40]))
+        # Check the saved tensor data (called with keyword arguments)
+        self.assertTrue(mock_save_tensor.called) # Ensure it was called
+        saved_call_kwargs = mock_save_tensor.call_args.kwargs # Access keyword arguments
+
+        self.assertEqual(saved_call_kwargs['name'], "out1")
+        # self.assertEqual(saved_call_kwargs['description'], "expected_description_if_any") # Optional: check description if important
+        np.testing.assert_array_equal(saved_call_kwargs['tensor_data'], np.array([20, 40]))
 
         self.assertIn("Inference successful with model 'm1'. Output tensor saved as 'out1' (UUID: new-uuid-123).", response)
         self.mock_ctx.log_warning.assert_any_call("Attempting to execute model code for 'm1' using exec(). SECURITY RISK: Untrusted code execution.")

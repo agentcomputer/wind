@@ -69,27 +69,28 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         self.mock_ctx.log_info.assert_any_call("Attempting to upload tensor: invalid_tensor")
         self.mock_ctx.log_error.assert_called_with("tensor_data for 'invalid_tensor' must be a non-empty list.")
 
-    @patch('tensordirectory.mcp_interface.storage.save_tensor', new_callable=MagicMock)
-    async def test_03b_upload_tensor_resource_value_error_on_conversion(self, mock_save_tensor):
-        # This test checks if np.array() fails inside the handler
-        # Pydantic will allow tensor_data=[["a", "b"], [1,2]] because it's a list of lists.
-        request_args = TensorUploadArgs( # Use updated model name
+    @patch('tensordirectory.mcp_interface.storage.save_tensor') # Outermost mock, new_callable defaults to MagicMock
+    @patch('tensordirectory.mcp_interface.np.array')      # Innermost mock
+    async def test_03b_upload_tensor_resource_value_error_on_conversion(self, mock_np_array, mock_save_tensor): # Order matters
+        mock_np_array.side_effect = ValueError("Simulated np.array error")
+
+        request_args = TensorUploadArgs(
             name="value_error_tensor",
             description="Numpy conversion failure test",
-            tensor_data=[["a", "b"], [1,2]] # This will cause np.array() to likely raise ValueError
+            # Data can be anything, as np.array is mocked to fail
+            tensor_data=[[1,2]]
         )
-        # Mock save_tensor to do nothing as it won't be reached if np.array fails
-        # or if it's reached, we don't care about its return for this test.
 
-        response = await upload_tensor(self.mock_ctx, args=request_args) # Call updated function name and use args=
+        response = await upload_tensor(self.mock_ctx, args=request_args)
 
         self.assertIn("error", response)
-        self.assertTrue(response["error"].startswith("Invalid tensor data format for 'value_error_tensor':"))
-        mock_save_tensor.assert_not_called() # Should fail before saving
+        # Check if the simulated error message is part of the response
+        self.assertIn("Invalid tensor data format for 'value_error_tensor': Simulated np.array error", response["error"])
+        mock_save_tensor.assert_not_called()
         self.mock_ctx.log_error.assert_any_call(
-            "ValueError during tensor conversion for 'value_error_tensor': object of too small depth for desired array",
+            "ValueError during tensor conversion for 'value_error_tensor': Simulated np.array error",
             exc_info=True
-        ) # Check for the specific log, actual error message from np might vary.
+        )
 
     # test_03c_upload_tensor_resource_missing_keys is removed as Pydantic handles this.
     # FastMCP would typically return a 422 error if Pydantic validation fails.
@@ -183,33 +184,34 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         self.mock_ctx.log_error.assert_called_with("Validation error for model 'empty_model': Either model_weights or model_code must be provided.")
 
 
-    @patch('tensordirectory.mcp_interface.storage.save_model', new_callable=MagicMock)
-    async def test_07b_upload_model_resource_value_error_on_conversion(self, mock_save_model):
-        # Pydantic ensures model_weights is a list if provided.
-        # This test is for when np.array(list_data) fails.
-        request_args = ModelUploadArgs( # Use updated model name
+    @patch('tensordirectory.mcp_interface.storage.save_model') # Outermost mock
+    @patch('tensordirectory.mcp_interface.np.array')      # Innermost mock
+    async def test_07b_upload_model_resource_value_error_on_conversion(self, mock_np_array, mock_save_model): # Order matters
+        mock_np_array.side_effect = ValueError("Simulated np.array error for model weights")
+
+        request_args = ModelUploadArgs(
             name="invalid_weights_model",
-            description="Test numpy conversion error",
-            model_weights=[["a", "b"], [1,2]] # This should cause np.array to fail
+            description="Test numpy conversion error for model",
+            model_weights=[[1,2]] # Data can be anything, as np.array is mocked
         )
-        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+        response = await upload_model(self.mock_ctx, args=request_args)
 
         self.assertIn("error", response)
-        self.assertTrue(response["error"].startswith("Invalid model_weights data format for 'invalid_weights_model':"))
+        self.assertIn("Invalid model_weights data format for 'invalid_weights_model': Simulated np.array error for model weights", response["error"])
         mock_save_model.assert_not_called()
         self.mock_ctx.log_error.assert_any_call(
-            "ValueError during model weights conversion for 'invalid_weights_model': object of too small depth for desired array",
+            "ValueError during model weights conversion for 'invalid_weights_model': Simulated np.array error for model weights",
             exc_info=True
         )
 
     @patch('tensordirectory.mcp_interface.storage.save_model', return_value=None)
     async def test_07c_upload_model_resource_storage_failure(self, mock_save_model):
-        request_data = ModelUploadRequest(
+        request_args = ModelUploadArgs( # Corrected variable name and Pydantic model name
             name="fail_model",
             description="Will fail",
             model_code="pass"
         )
-        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+        response = await upload_model(self.mock_ctx, args=request_args)
 
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save model 'fail_model'")
@@ -229,7 +231,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
         tool_response = await query_tensor_directory(prompt=prompt_text, ctx=self.mock_ctx, params=params_dict)
 
-        mock_invoke_agent_query.assert_called_once_with(prompt_text, params_dict, self.mock_ctx)
+        mock_invoke_agent_query.assert_called_once_with(prompt=prompt_text, params=params_dict, ctx=self.mock_ctx)
         self.assertEqual(tool_response, mock_agent_response)
         self.mock_ctx.log_info.assert_any_call(f"Query received for TensorDirectory: '{prompt_text}' with params: {params_dict}")
 
