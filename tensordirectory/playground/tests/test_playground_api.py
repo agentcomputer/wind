@@ -8,8 +8,8 @@ from tensordirectory.playground.main import app
 # mcp_server to inspect tools (though not strictly needed if mocking Tool.execute_tool)
 from tensordirectory.mcp_interface import mcp_server
 # The actual Tool class used by FastMCP server
-# Path to Tool is mcp.server.fastmcp.tool.Tool for the OpenRouterAI mcp package
-from mcp.server.fastmcp.tool import Tool as FastMCPTool
+# Using mcp.tool.Tool path, which worked previously with OpenRouterAI mcp package
+from mcp.tool import Tool as FastMCPTool
 
 
 client = TestClient(app)
@@ -76,6 +76,7 @@ async def test_execute_tool_success(mock_execute_tool_method):
 
     tool_name = "upload_tensor"
     # Verify this tool actually exists in the server to avoid false positives if mock is too broad
+    # Using mcp_server.tools for lookup as per FastMCP v1.9.2 structure
     assert tool_name in mcp_server.tools
 
     args_payload = {
@@ -92,9 +93,8 @@ async def test_execute_tool_success(mock_execute_tool_method):
     assert data["result"] == {"status": "success", "data": "mocked_tensor_uuid"}
 
     # Check that the mock was called on the correct instance with correct args
-    # mcp_server.router.tools_by_name[tool_name] is the instance of the Tool class
-    # .execute_tool is the method we mocked with new_callable=mock.AsyncMock
-    mcp_server.router.tools_by_name[tool_name].execute_tool.assert_called_once_with(args_payload)
+    # For FastMCP v1.9.2, tools are in mcp_server.tools (a dict)
+    mcp_server.tools[tool_name].execute_tool.assert_called_once_with(args_payload)
 
 
 def test_execute_tool_not_found():
@@ -114,7 +114,7 @@ async def test_execute_tool_validation_error(mock_execute_tool_method):
     mock_execute_tool_method.side_effect = ValidationError(errors=validation_errors_dict, model=DummyModel)
 
     tool_name = "upload_tensor"
-    assert tool_name in mcp_server.tools
+    assert tool_name in mcp_server.tools # Using mcp_server.tools for lookup
     args_payload = {"description": "missing name"}
 
     response = client.post("/api/execute_tool", json={"tool_name": tool_name, "args": args_payload})
@@ -131,7 +131,7 @@ async def test_execute_tool_generic_error(mock_execute_tool_method):
     mock_execute_tool_method.side_effect = Exception("Something went very wrong")
 
     tool_name = "upload_tensor"
-    assert tool_name in mcp_server.tools
+    assert tool_name in mcp_server.tools # Using mcp_server.tools for lookup
     args_payload = {"name": "test", "description": "desc", "tensor_data": []}
 
     response = client.post("/api/execute_tool", json={"tool_name": tool_name, "args": args_payload})

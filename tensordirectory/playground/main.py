@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 # Import the MCP server instance
-from tensordirectory.mcp_interface import mcp_server # mcp_server is an instance of FastMCP
+from tensordirectory.mcp_interface import mcp_server # mcp_server is an instance of mcp.server.fastmcp.FastMCP
 from pydantic import BaseModel, ValidationError
 
 app = FastAPI()
@@ -33,33 +33,22 @@ async def get_playground_home():
 async def get_api_tools():
     """
     Returns a list of available MCP tools with basic schema information.
+    Uses mcp_server.tool_definitions for iteration.
     """
     tools_info_list = []
 
-    # Check if mcp_server has tool_definitions as per instruction for iteration
-    if not hasattr(mcp_server, 'tool_definitions') or not isinstance(mcp_server.tool_definitions, list):
-        # This indicates the attribute is not what's expected.
-        # For the OpenRouterAI mcp package, tools are in mcp_server.tools (dict)
-        # or mcp_server.router.tools (list via router)
-        # However, strictly following the prompt to use mcp_server.tool_definitions:
-        print("Error: mcp_server.tool_definitions is not a list or does not exist. Using mcp_server.tools.values() as fallback for now if available, or router.")
-        source_iterable = []
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
-            source_iterable = mcp_server.tools.values()
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools') and isinstance(mcp_server.router.tools, list):
-             source_iterable = mcp_server.router.tools
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool definitions.")
-    else:
-        source_iterable = mcp_server.tool_definitions
+    if not hasattr(mcp_server, 'tool_definitions'):
+        raise HTTPException(status_code=500, detail="Server configuration error: 'tool_definitions' not found on mcp_server.")
 
-    for tool_handler in source_iterable:
-        tool_name = tool_handler.name
-        description = tool_handler.description or tool_handler.fn.__doc__ or "No description available."
+    for tool_def in mcp_server.tool_definitions:
+        tool_name = tool_def.name
+        description = tool_def.description or tool_def.fn.__doc__ or "No description available."
 
         parameters = []
-        if hasattr(tool_handler, 'model') and tool_handler.model:
-            schema = tool_handler.model.schema()
+        pydantic_model = tool_def.model
+
+        if pydantic_model:
+            schema = pydantic_model.schema()
             if 'properties' in schema:
                 for param_name, param_info in schema.get('properties', {}).items():
                     parameters.append({
@@ -69,10 +58,12 @@ async def get_api_tools():
                         "required": param_name in schema.get("required", [])
                     })
         elif tool_name == "query_tensor_directory":
-             description = tool_handler.fn.__doc__ or "Query the tensor directory using natural language."
+             description = tool_def.fn.__doc__ or "Query the tensor directory using natural language."
              parameters = [
                 {"name": "prompt", "type": "string", "title": "Prompt", "required": True},
-                {"name": "params", "type": "string", "title": "Params (JSON string, optional)", "required": False}
+                # For query_tensor_directory, 'params' is a direct kwarg, not part of a Pydantic model
+                # Representing it as an object that can take arbitrary key-value pairs
+                {"name": "params", "type": "object", "title": "Params (JSON object, optional)", "required": False, "default": None}
              ]
 
         tools_info_list.append({
@@ -86,37 +77,32 @@ async def get_api_tools():
 async def get_tool_schema(tool_name: str):
     """
     Returns the detailed JSON schema for a specific tool's arguments model.
+    Uses mcp_server.tools.get(tool_name) for lookup.
     """
-    # Access tool definition via mcp_server.tools_by_name
-    if not hasattr(mcp_server, 'tools_by_name') or not isinstance(mcp_server.tools_by_name, dict):
-        # Fallback if the direct attribute doesn't exist, though the prompt implies it should.
-        print("Error: mcp_server.tools_by_name is not a dict or does not exist. Using mcp_server.tools as fallback if available, or router.")
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
-            tool_definition = mcp_server.tools.get(tool_name)
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
-            tool_definition = mcp_server.router.tools_by_name.get(tool_name)
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool lookups.")
-    else:
-        tool_definition = mcp_server.tools_by_name.get(tool_name)
+    if not hasattr(mcp_server, 'tools') or not isinstance(mcp_server.tools, dict):
+        raise HTTPException(status_code=500, detail="Server configuration error: 'tools' dictionary not found on mcp_server.")
 
-    if not tool_definition:
-        raise HTTPException(status_code=404, detail="Tool not found")
+    tool_instance = mcp_server.tools.get(tool_name)
 
-    if hasattr(tool_definition, 'model') and tool_definition.model:
-        return JSONResponse(content=tool_definition.model.schema())
+    if not tool_instance:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found.")
+
+    if tool_instance.model:
+        return JSONResponse(content=tool_instance.model.schema())
     elif tool_name == "query_tensor_directory":
+        # Manual schema for query_tensor_directory if its model is None
+        # but it accepts 'prompt' and 'params' directly.
         return JSONResponse(content={
             "title": "QueryTensorDirectoryArgs",
             "type": "object",
             "properties": {
                 "prompt": {"title": "Prompt", "type": "string"},
-                "params": {"title": "Params", "type": "object", "additionalProperties": True, "description": "JSON object for additional parameters. Optional."}
+                "params": {"title": "Params", "type": "object", "default": None, "description": "JSON object for additional parameters. Optional."}
             },
             "required": ["prompt"]
         })
     else:
-        return JSONResponse(content={"message": "This tool does not have a Pydantic arguments model or a custom schema defined."})
+        return JSONResponse(content={"message": f"Tool '{tool_name}' does not have a defined Pydantic arguments model for schema generation."})
 
 class ExecuteToolRequest(BaseModel):
     tool_name: str
@@ -127,27 +113,16 @@ async def execute_tool_endpoint(request_data: ExecuteToolRequest):
     tool_name = request_data.tool_name
     args = request_data.args
 
-    tool_definition = None
-    # Access tool definition via mcp_server.tools_by_name
-    if not hasattr(mcp_server, 'tools_by_name') or not isinstance(mcp_server.tools_by_name, dict):
-        print("Error: mcp_server.tools_by_name is not a dict or does not exist. Using mcp_server.tools as fallback if available, or router.")
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict): # Fallback
-            tool_definition = mcp_server.tools.get(tool_name)
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
-            tool_definition = mcp_server.router.tools_by_name.get(tool_name)
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool lookups for execution.")
-    else:
-         if tool_name not in mcp_server.tools_by_name: # Check existence
-            raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found via tools_by_name.")
-         tool_definition = mcp_server.tools_by_name[tool_name]
+    if not hasattr(mcp_server, 'tools') or not isinstance(mcp_server.tools, dict):
+        raise HTTPException(status_code=500, detail="Server configuration error: 'tools' dictionary not found for execution.")
 
-
-    if not tool_definition: # Should be caught by the check above if tools_by_name exists
+    if tool_name not in mcp_server.tools:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found.")
 
+    tool_instance = mcp_server.tools[tool_name]
+
     try:
-        result = await tool_definition.execute_tool(args)
+        result = await tool_instance.execute_tool(args)
         return {"success": True, "result": result}
 
     except ValidationError as ve:
