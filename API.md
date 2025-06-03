@@ -190,3 +190,402 @@ The tool returns a string which can be a direct answer, a summary, a status mess
 ---
 **Security Note on `model_code` Execution:**
 As highlighted in the main `README.md`, the execution of user-provided `model_code` via `exec()` in the agent is a **significant security risk**. This functionality should not be used in production environments with untrusted model code.
+
+---
+
+## Tool: `list_tensors`
+
+**Description:**
+This tool lists tensors stored in the TensorDirectory, allowing for optional filtering by name and pagination.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`list_tensors`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `ListArgs` Pydantic model:
+
+*   `filter_by_name_contains: Optional[str] = None` (Optional)
+    *   A string to filter tensors whose names contain this substring. Case-sensitive.
+*   `limit: int = Field(default=100, gt=0, le=1000)` (Optional)
+    *   The maximum number of tensor metadata entries to return. Defaults to 100. Must be between 1 and 1000.
+*   `offset: int = Field(default=0, ge=0)` (Optional)
+    *   The number of tensor metadata entries to skip before starting to collect the result set. Defaults to 0. Must be greater than or equal to 0.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `ListArgs`):**
+
+```json
+{
+    "filter_by_name_contains": "feature_vector",
+    "limit": 50,
+    "offset": 0
+}
+```
+
+**Example Success Response (JSON body returned by the tool function, corresponding to `ListTensorsResponse`):**
+
+```json
+{
+    "tensors": [
+        {
+            "uuid": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "user_name": "my_feature_vector_v2",
+            "description": "Feature vector extracted from image 'img_1024.jpg' using ResNet50",
+            "creation_date": "2023-10-28T10:30:00.123456",
+            "original_dtype": "float64",
+            "original_shape": "(3, 4)"
+        },
+        {
+            "uuid": "b2c3d4e5-f6a7-8901-2345-678901bcdef0",
+            "user_name": "another_feature_vector",
+            "description": "Some other features",
+            "creation_date": "2023-10-29T11:00:00.567890",
+            "original_dtype": "int32",
+            "original_shape": "(100,)"
+        }
+    ],
+    "total_items_in_collection": 2,
+    "offset": 0,
+    "limit": 50
+}
+```
+
+**Example Error Response (JSON body returned by the tool function if an internal error occurs):**
+(Note: Pydantic validation errors for arguments are typically handled by FastMCP at a higher level.)
+
+```json
+{
+    "tensors": [],
+    "total_items_in_collection": 0,
+    "offset": 0,
+    "limit": 50
+}
+```
+
+---
+
+## Tool: `list_models`
+
+**Description:**
+This tool lists models stored in the TensorDirectory, allowing for optional filtering by name and pagination.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`list_models`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `ListArgs` Pydantic model:
+
+*   `filter_by_name_contains: Optional[str] = None` (Optional)
+    *   A string to filter models whose names contain this substring. Case-sensitive.
+*   `limit: int = Field(default=100, gt=0, le=1000)` (Optional)
+    *   The maximum number of model metadata entries to return. Defaults to 100. Must be between 1 and 1000.
+*   `offset: int = Field(default=0, ge=0)` (Optional)
+    *   The number of model metadata entries to skip before starting to collect the result set. Defaults to 0. Must be greater than or equal to 0.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `ListArgs`):**
+
+```json
+{
+    "filter_by_name_contains": "enhancer",
+    "limit": 10,
+    "offset": 0
+}
+```
+
+**Example Success Response (JSON body returned by the tool function, corresponding to `ListModelsResponse`):**
+
+```json
+{
+    "models": [
+        {
+            "uuid": "f0e1d2c3-b4a5-6789-0123-456789abcdef",
+            "user_name": "image_enhancer_v1",
+            "description": "Simple model to adjust image brightness, defined in Python.",
+            "upload_date": "2023-10-28T12:00:00.123456",
+            "has_code": true,
+            "has_weights": false
+        },
+        {
+            "uuid": "g1h2i3j4-k5l6-m7n8-o9p0-qrstuvwxyz01",
+            "user_name": "super_resolution_enhancer",
+            "description": "Advanced SRGAN model.",
+            "upload_date": "2023-10-29T15:00:00.567890",
+            "has_code": false,
+            "has_weights": true
+        }
+    ],
+    "total_items_in_collection": 2,
+    "offset": 0,
+    "limit": 10
+}
+```
+
+**Example Error Response (JSON body returned by the tool function if an internal error occurs):**
+
+```json
+{
+    "models": [],
+    "total_items_in_collection": 0,
+    "offset": 0,
+    "limit": 10
+}
+```
+
+---
+
+## Tool: `delete_tensor`
+
+**Description:**
+This tool deletes a tensor from the TensorDirectory by its user-defined name or its system-generated UUID.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`delete_tensor`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `DeleteArgs` Pydantic model:
+
+*   `name_or_uuid: str` (Required)
+    *   The name or UUID of the tensor to be deleted.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `DeleteArgs`):**
+
+Using name:
+```json
+{
+    "name_or_uuid": "my_feature_vector_v2"
+}
+```
+
+Using UUID:
+```json
+{
+    "name_or_uuid": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+}
+```
+
+**Example Success Response (JSON body returned by the tool function):**
+
+```json
+{
+    "success": true,
+    "message": "Tensor 'my_feature_vector_v2' (UUID: a1b2c3d4-e5f6-7890-1234-567890abcdef) deleted successfully."
+}
+```
+
+**Example Error Response (JSON body returned by the tool function):**
+
+Tensor not found by name:
+```json
+{
+    "success": false,
+    "message": "Tensor 'non_existent_tensor' not found by name."
+}
+```
+
+Tensor not found by UUID (or delete failed for other reasons):
+```json
+{
+    "success": false,
+    "message": "Tensor UUID 'a1b2c3d4-e5f6-7890-1234-000000000000' not found or delete failed."
+}
+```
+
+Storage file not found (system-level issue):
+```json
+{
+    "success": false,
+    "message": "Storage file not found."
+}
+```
+
+---
+
+## Tool: `delete_model`
+
+**Description:**
+This tool deletes a model from the TensorDirectory by its user-defined name or its system-generated UUID.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`delete_model`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `DeleteArgs` Pydantic model:
+
+*   `name_or_uuid: str` (Required)
+    *   The name or UUID of the model to be deleted.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `DeleteArgs`):**
+
+Using name:
+```json
+{
+    "name_or_uuid": "image_enhancer_v1"
+}
+```
+
+Using UUID:
+```json
+{
+    "name_or_uuid": "f0e1d2c3-b4a5-6789-0123-456789abcdef"
+}
+```
+
+**Example Success Response (JSON body returned by the tool function):**
+
+```json
+{
+    "success": true,
+    "message": "Model 'image_enhancer_v1' (UUID: f0e1d2c3-b4a5-6789-0123-456789abcdef) deleted successfully."
+}
+```
+
+**Example Error Response (JSON body returned by the tool function):**
+
+Model not found by name:
+```json
+{
+    "success": false,
+    "message": "Model 'unknown_model' not found by name."
+}
+```
+
+Model not found by UUID:
+```json
+{
+    "success": false,
+    "message": "Model UUID 'f0e1d2c3-b4a5-6789-0123-000000000000' not found or delete failed."
+}
+```
+
+---
+
+## Tool: `update_tensor_metadata`
+
+**Description:**
+This tool updates the metadata of an existing tensor in the TensorDirectory, identified by its name or UUID.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`update_tensor_metadata`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `UpdateMetadataArgs` Pydantic model:
+
+*   `name_or_uuid: str` (Required)
+    *   The name or UUID of the tensor whose metadata is to be updated.
+*   `metadata_updates: Dict[str, Any]` (Required)
+    *   A dictionary containing the metadata fields to update and their new values.
+    *   Currently, updatable fields for tensors typically include `user_name` and `description`. Other fields like `uuid`, `creation_date`, `original_dtype`, `original_shape` are generally considered immutable or system-managed post-creation. The storage layer will determine which fields can be updated.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `UpdateMetadataArgs`):**
+
+```json
+{
+    "name_or_uuid": "my_feature_vector_v2",
+    "metadata_updates": {
+        "description": "Updated description: Feature vector from ResNet50, normalized.",
+        "user_name": "my_feature_vector_v2_normalized"
+    }
+}
+```
+
+**Example Success Response (JSON body returned by the tool function):**
+
+The response includes the full, updated metadata for the tensor.
+
+```json
+{
+    "success": true,
+    "metadata": {
+        "uuid": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+        "user_name": "my_feature_vector_v2_normalized",
+        "description": "Updated description: Feature vector from ResNet50, normalized.",
+        "creation_date": "2023-10-28T10:30:00.123456",
+        "original_dtype": "float64",
+        "original_shape": "(3, 4)"
+    }
+}
+```
+
+**Example Error Response (JSON body returned by the tool function):**
+
+Tensor not found:
+```json
+{
+    "success": false,
+    "message": "Tensor 'non_existent_tensor' not found by name for update."
+}
+```
+
+Update failed (e.g., UUID not found in storage, or internal error during update):
+```json
+{
+    "success": false,
+    "message": "Tensor UUID 'a1b2c3d4-e5f6-7890-1234-000000000000' not found or update failed."
+}
+```
+
+---
+
+## Tool: `update_model_metadata`
+
+**Description:**
+This tool updates the metadata of an existing model in the TensorDirectory, identified by its name or UUID.
+
+**Method:**
+MCP Tool. Clients invoke this by providing the tool name (`update_model_metadata`) and an arguments object.
+
+**Parameters:**
+The tool accepts a single argument object (e.g., `args`) with the following fields, corresponding to the `UpdateMetadataArgs` Pydantic model:
+
+*   `name_or_uuid: str` (Required)
+    *   The name or UUID of the model whose metadata is to be updated.
+*   `metadata_updates: Dict[str, Any]` (Required)
+    *   A dictionary containing the metadata fields to update and their new values.
+    *   Currently, updatable fields for models typically include `user_name` and `description`. Fields like `uuid`, `upload_date`, `has_code`, `has_weights` are generally immutable or reflect the stored content. The storage layer determines which fields are updatable.
+
+**Example Arguments for Tool Call (conceptual JSON representation of `UpdateMetadataArgs`):**
+
+```json
+{
+    "name_or_uuid": "image_enhancer_v1",
+    "metadata_updates": {
+        "description": "Simple model to adjust image brightness and contrast. Python based.",
+        "user_name": "image_brightness_contrast_v1.1"
+    }
+}
+```
+
+**Example Success Response (JSON body returned by the tool function):**
+
+The response includes the full, updated metadata for the model.
+
+```json
+{
+    "success": true,
+    "metadata": {
+        "uuid": "f0e1d2c3-b4a5-6789-0123-456789abcdef",
+        "user_name": "image_brightness_contrast_v1.1",
+        "description": "Simple model to adjust image brightness and contrast. Python based.",
+        "upload_date": "2023-10-28T12:00:00.123456",
+        "has_code": true,
+        "has_weights": false
+    }
+}
+```
+
+**Example Error Response (JSON body returned by the tool function):**
+
+Model not found:
+```json
+{
+    "success": false,
+    "message": "Model 'unknown_model_v2' not found by name for update."
+}
+```
+
+Update failed:
+```json
+{
+    "success": false,
+    "message": "Model UUID 'f0e1d2c3-b4a5-6789-0123-000000000000' not found or update failed."
+}
+```
