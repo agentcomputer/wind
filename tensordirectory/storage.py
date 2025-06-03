@@ -92,11 +92,17 @@ def save_tensor(name: str, description: str, tensor_data: np.ndarray) -> str:
         mappings = hf[mapping_path]
 
         # Convert to list for easier manipulation
-        mappings_list = list(mappings[:])
+        mappings_list = list(mappings[:]) # Contains (name_raw, uuid_raw) tuples
 
         name_exists = False
-        for i, (existing_name, _) in enumerate(mappings_list):
-            if existing_name == name:
+        for i in range(len(mappings_list)):
+            existing_name_raw, old_uuid_raw = mappings_list[i] # Get raw values
+
+            # Decode existing_name_raw if it's bytes
+            current_existing_name = existing_name_raw.decode('utf-8') if isinstance(existing_name_raw, bytes) else str(existing_name_raw)
+
+            if current_existing_name == name: # Compare decoded str with input str
+                # Update with input 'name' (already str) and new 'tensor_uuid' (already str)
                 mappings_list[i] = (name, tensor_uuid)
                 name_exists = True
                 break
@@ -292,11 +298,17 @@ def save_model(name: str, description: str, model_weights: np.ndarray | None = N
         # Update model_name_to_uuid mapping
         mapping_path = '/indices/model_name_to_uuid'
         mappings = hf[mapping_path]
-        mappings_list = list(mappings[:])
+        mappings_list = list(mappings[:]) # Contains (name_raw, uuid_raw) tuples
 
         name_exists = False
-        for i, (existing_name, _) in enumerate(mappings_list):
-            if existing_name == name:
+        for i in range(len(mappings_list)):
+            existing_name_raw, old_uuid_raw = mappings_list[i] # Get raw values
+
+            # Decode existing_name_raw if it's bytes
+            current_existing_name = existing_name_raw.decode('utf-8') if isinstance(existing_name_raw, bytes) else str(existing_name_raw)
+
+            if current_existing_name == name: # Compare decoded str with input str
+                # Update with input 'name' (already str) and new 'model_uuid' (already str)
                 mappings_list[i] = (name, model_uuid)
                 name_exists = True
                 break
