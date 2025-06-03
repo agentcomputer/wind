@@ -8,8 +8,8 @@ from tensordirectory.playground.main import app
 # mcp_server to inspect tools (though not strictly needed if mocking Tool.execute_tool)
 from tensordirectory.mcp_interface import mcp_server
 # The actual Tool class used by FastMCP server
-# Path to Tool is likely mcp.tool.Tool based on mcp package structure
-from mcp.tool import Tool as FastMCPTool
+# Path to Tool is mcp.server.fastmcp.tool.Tool for the OpenRouterAI mcp package
+from mcp.server.fastmcp.tool import Tool as FastMCPTool
 
 
 client = TestClient(app)
