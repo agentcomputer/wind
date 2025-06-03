@@ -7,14 +7,30 @@ import asyncio # Required for IsolatedAsyncioTestCase if not using it directly
 
 # Assuming tensordirectory is in PYTHONPATH or project is structured as a package
 from tensordirectory.mcp_interface import (
-    upload_tensor, # Updated name
-    upload_model,  # Updated name
+    upload_tensor,
+    upload_model,
     query_tensor_directory,
-    mcp_server, # To check instance
-    TensorUploadArgs, # Updated Pydantic model name
-    ModelUploadArgs   # Updated Pydantic model name
+    # New tools to import for testing
+    list_tensors,
+    list_models,
+    delete_tensor,
+    delete_model,
+    update_tensor_metadata,
+    update_model_metadata,
+    mcp_server,
+    TensorUploadArgs,
+    ModelUploadArgs,
+    # New Pydantic models for args and responses to import
+    ListArgs,
+    DeleteArgs,
+    UpdateMetadataArgs,
+    TensorMetadata,
+    ModelMetadata,
+    ListTensorsResponse,
+    ListModelsResponse
 )
 from mcp.server.fastmcp import FastMCP, Context # For type checking and mock context
+import tensordirectory.mcp_interface # To patch h5py.File within this module's scope
 
 # It's often easier to mock the specific functions from storage that mcp_interface uses
 # rather than the whole module.
@@ -225,7 +241,6 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_agent_response = "Agent says hello!"
         mock_invoke_agent_query.return_value = mock_agent_response
 
-        # self.mock_ctx is already set up in setUp()
         prompt_text = "What is tensor X?"
         params_dict = {"detail": "high"}
 
@@ -234,6 +249,152 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         mock_invoke_agent_query.assert_called_once_with(prompt=prompt_text, params=params_dict, ctx=self.mock_ctx)
         self.assertEqual(tool_response, mock_agent_response)
         self.mock_ctx.log_info.assert_any_call(f"Query received for TensorDirectory: '{prompt_text}' with params: {params_dict}")
+
+    # --- Tests for new utility tools ---
+
+    # LIST TENSORS
+    @patch('tensordirectory.mcp_interface.storage.list_tensors')
+    async def test_09_list_tensors_success(self, mock_storage_list_tensors):
+        mock_storage_list_tensors.return_value = (
+            [
+                {'uuid': 'u1', 'user_name': 't1', 'description': 'd1', 'creation_date': 'date1', 'original_dtype': 'float32', 'original_shape': '(10,)'},
+                {'uuid': 'u2', 'user_name': 't2', 'description': 'd2', 'creation_date': 'date2', 'original_dtype': 'int32', 'original_shape': '(5,)'}
+            ],
+            2 # total_count
+        )
+        args = ListArgs(limit=5, offset=0)
+        response = await list_tensors(self.mock_ctx, args=args)
+
+        mock_storage_list_tensors.assert_called_once_with(filter_by_name_contains=None, limit=5, offset=0)
+        self.assertIsInstance(response, ListTensorsResponse)
+        self.assertEqual(len(response.tensors), 2)
+        self.assertEqual(response.total_items_in_collection, 2)
+        self.assertEqual(response.tensors[0].user_name, 't1')
+        self.assertIsInstance(response.tensors[0], TensorMetadata)
+
+    @patch('tensordirectory.mcp_interface.storage.list_tensors')
+    async def test_10_list_tensors_empty(self, mock_storage_list_tensors):
+        mock_storage_list_tensors.return_value = ([], 0)
+        args = ListArgs()
+        response = await list_tensors(self.mock_ctx, args=args)
+        self.assertEqual(len(response.tensors), 0)
+        self.assertEqual(response.total_items_in_collection, 0)
+
+    @patch('tensordirectory.mcp_interface.storage.list_tensors', side_effect=Exception("Storage List Error"))
+    async def test_11_list_tensors_storage_error(self, mock_storage_list_tensors_error):
+        args = ListArgs()
+        response = await list_tensors(self.mock_ctx, args=args)
+        self.assertEqual(len(response.tensors), 0) # Should return empty list on error
+        self.assertEqual(response.total_items_in_collection, 0)
+        self.mock_ctx.log_error.assert_called_with("Error listing tensors: Storage List Error", exc_info=True)
+
+    # LIST MODELS (similar structure to list_tensors)
+    @patch('tensordirectory.mcp_interface.storage.list_models')
+    async def test_12_list_models_success(self, mock_storage_list_models):
+        mock_storage_list_models.return_value = (
+            [
+                {'uuid': 'm1', 'user_name': 'modelA', 'description': 'descA', 'upload_date': 'dateA', 'has_code': True, 'has_weights': False},
+                {'uuid': 'm2', 'user_name': 'modelB', 'description': 'descB', 'upload_date': 'dateB', 'has_code': False, 'has_weights': True}
+            ],
+            2
+        )
+        args = ListArgs(filter_by_name_contains="model")
+        response = await list_models(self.mock_ctx, args=args)
+        mock_storage_list_models.assert_called_once_with(filter_by_name_contains="model", limit=args.limit, offset=args.offset)
+        self.assertIsInstance(response, ListModelsResponse)
+        self.assertEqual(len(response.models), 2)
+        self.assertEqual(response.models[0].user_name, "modelA")
+        self.assertTrue(response.models[0].has_code)
+        self.assertIsInstance(response.models[0], ModelMetadata)
+
+    # DELETE TENSOR
+    @patch('tensordirectory.mcp_interface.storage.delete_tensor_by_uuid')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=True) # Assume input is UUID
+    async def test_13_delete_tensor_by_uuid_success(self, mock_is_uuid, mock_storage_delete):
+        mock_storage_delete.return_value = True
+        args = DeleteArgs(name_or_uuid="sample-uuid-to-delete")
+        response = await delete_tensor(self.mock_ctx, args=args)
+
+        mock_is_uuid.assert_called_once_with("sample-uuid-to-delete")
+        mock_storage_delete.assert_called_once_with("sample-uuid-to-delete")
+        self.assertEqual(response, {"success": True, "message": "Tensor 'sample-uuid-to-delete' (UUID: sample-uuid-to-delete) deleted successfully."})
+
+    @patch('tensordirectory.mcp_interface.h5py.File')
+    @patch('tensordirectory.mcp_interface.storage._get_uuid_from_name')
+    @patch('tensordirectory.mcp_interface.storage.delete_tensor_by_uuid')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=False) # Assume input is a name
+    async def test_14_delete_tensor_by_name_success(self, mock_is_uuid, mock_storage_delete, mock_get_uuid, mock_h5file):
+        # Setup for _get_uuid_from_name call within the tool
+        mock_hf_instance = MagicMock(spec=h5py.File)
+        mock_h5file.return_value.__enter__.return_value = mock_hf_instance
+        mock_get_uuid.return_value = "resolved-uuid-from-name"
+        mock_storage_delete.return_value = True
+
+        args = DeleteArgs(name_or_uuid="tensor_name_to_delete")
+        response = await delete_tensor(self.mock_ctx, args=args)
+
+        mock_is_uuid.assert_called_once_with("tensor_name_to_delete")
+        mock_h5file.assert_called_once_with(tensordirectory.mcp_interface.storage.HDF5_FILE_NAME, 'r')
+        mock_get_uuid.assert_called_once_with(mock_hf_instance, "tensor", "tensor_name_to_delete")
+        mock_storage_delete.assert_called_once_with("resolved-uuid-from-name")
+        self.assertTrue(response["success"])
+        self.assertIn("deleted successfully", response["message"])
+
+    @patch('tensordirectory.mcp_interface.h5py.File')
+    @patch('tensordirectory.mcp_interface.storage._get_uuid_from_name')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=False) # Assume input is a name
+    async def test_15_delete_tensor_name_not_found(self, mock_is_uuid, mock_get_uuid, mock_h5file):
+        mock_hf_instance = MagicMock(spec=h5py.File)
+        mock_h5file.return_value.__enter__.return_value = mock_hf_instance
+        mock_get_uuid.return_value = None # Simulate name not found
+
+        args = DeleteArgs(name_or_uuid="unknown_tensor_name")
+        response = await delete_tensor(self.mock_ctx, args=args)
+
+        self.assertEqual(response, {"success": False, "message": "Tensor 'unknown_tensor_name' not found by name."})
+
+    # DELETE MODEL (similar structure to delete_tensor)
+    @patch('tensordirectory.mcp_interface.storage.delete_model_by_uuid')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=True)
+    async def test_16_delete_model_by_uuid_success(self, mock_is_uuid, mock_storage_delete_model):
+        mock_storage_delete_model.return_value = True
+        args = DeleteArgs(name_or_uuid="model-uuid-to-delete")
+        response = await delete_model(self.mock_ctx, args=args)
+        mock_storage_delete_model.assert_called_once_with("model-uuid-to-delete")
+        self.assertTrue(response["success"])
+
+    # UPDATE TENSOR METADATA
+    @patch('tensordirectory.mcp_interface.storage.update_tensor_metadata')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=True) # Assume input is UUID
+    async def test_17_update_tensor_metadata_success(self, mock_is_uuid, mock_storage_update):
+        updated_metadata_payload = {"uuid": "uuid1", "user_name": "new_name", "description": "new_desc"}
+        mock_storage_update.return_value = updated_metadata_payload
+
+        args = UpdateMetadataArgs(name_or_uuid="uuid1", metadata_updates={"user_name": "new_name", "description": "new_desc"})
+        response = await update_tensor_metadata(self.mock_ctx, args=args)
+
+        mock_storage_update.assert_called_once_with("uuid1", {"user_name": "new_name", "description": "new_desc"})
+        self.assertEqual(response, {"success": True, "metadata": updated_metadata_payload})
+
+    @patch('tensordirectory.mcp_interface.storage.update_tensor_metadata')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=True)
+    async def test_18_update_tensor_metadata_item_not_found(self, mock_is_uuid, mock_storage_update):
+        mock_storage_update.return_value = None # Simulate item not found by storage function
+        args = UpdateMetadataArgs(name_or_uuid="uuid_not_exist", metadata_updates={"description": "new_desc"})
+        response = await update_tensor_metadata(self.mock_ctx, args=args)
+        self.assertEqual(response, {"success": False, "message": "Tensor UUID 'uuid_not_exist' not found or update failed."})
+
+    # UPDATE MODEL METADATA (similar structure)
+    @patch('tensordirectory.mcp_interface.storage.update_model_metadata')
+    @patch('tensordirectory.mcp_interface._is_uuid', return_value=True)
+    async def test_19_update_model_metadata_success(self, mock_is_uuid, mock_storage_update_model):
+        updated_model_meta = {"uuid": "muuid1", "user_name": "new_model_name", "has_code": True, "has_weights": False}
+        mock_storage_update_model.return_value = updated_model_meta
+        args = UpdateMetadataArgs(name_or_uuid="muuid1", metadata_updates={"user_name": "new_model_name"})
+        response = await update_model_metadata(self.mock_ctx, args=args)
+        mock_storage_update_model.assert_called_once_with("muuid1", {"user_name": "new_model_name"})
+        self.assertEqual(response, {"success": True, "metadata": updated_model_meta})
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
