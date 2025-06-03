@@ -4,3 +4,7 @@ google-generativeai
 python-dotenv
 modelcontextprotocol
 pydantic
+fastapi
+uvicorn[standard]
+pytest
+httpx
