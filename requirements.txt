@@ -2,7 +2,8 @@ numpy
 h5py
 google-generativeai
 python-dotenv
-modelcontextprotocol
+# modelcontextprotocol # Replaced by mcp
+mcp # Using OpenRouterAI's mcp package
 pydantic
 fastapi
 uvicorn[standard]
