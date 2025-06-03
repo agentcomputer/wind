@@ -4,10 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from typing import Dict, Any, List
 
-# Import the MCP server instance and Context
+# Import the MCP server instance
 from tensordirectory.mcp_interface import mcp_server
-# from mcp.server.fastmcp import Context # Context might not be needed if Tool.execute_tool handles it
-from pydantic import BaseModel, ValidationError # Import BaseModel and ValidationError
+from pydantic import BaseModel, ValidationError
 
 app = FastAPI()
 
@@ -32,11 +31,18 @@ async def get_playground_home():
 
 @app.get("/api/tools", response_class=JSONResponse)
 async def get_api_tools():
-    tools_info = []
-    for tool_name, tool_handler in mcp_server.tools.items():
+    """
+    Returns a list of available MCP tools with basic schema information.
+    """
+    tools_info_list = []
+    # Iterate over mcp_server.router.tools (list of Tool instances)
+    for tool_handler in mcp_server.router.tools:
+        tool_name = tool_handler.name
+        description = tool_handler.description or tool_handler.fn.__doc__ or "No description available."
+
+        parameters = []
         if hasattr(tool_handler, 'model') and tool_handler.model:
             schema = tool_handler.model.schema()
-            parameters = []
             if 'properties' in schema:
                 for param_name, param_info in schema.get('properties', {}).items():
                     parameters.append({
@@ -45,40 +51,37 @@ async def get_api_tools():
                         "title": param_info.get("title", param_name.replace("_", " ").title()),
                         "required": param_name in schema.get("required", [])
                     })
-            tools_info.append({
-                "name": tool_name,
-                "description": schema.get("description", tool_handler.fn.__doc__ or "No description available."),
-                "parameters": parameters
-            })
-        else:
-            if tool_name == "query_tensor_directory":
-                tools_info.append({
-                    "name": tool_name,
-                    "description": tool_handler.fn.__doc__ or "Query the tensor directory using natural language.",
-                    "parameters": [
-                        {"name": "prompt", "type": "string", "title": "Prompt", "required": True},
-                        {"name": "params", "type": "string", "title": "Params (JSON string, optional)", "required": False}
-                    ]
-                })
-            else:
-                 tools_info.append({
-                    "name": tool_name,
-                    "description": tool_handler.fn.__doc__ or "No description available.",
-                    "parameters": []
-                })
-    return JSONResponse(content={"tools": tools_info})
+        elif tool_name == "query_tensor_directory": # Special handling for query_tensor_directory if no model
+             description = tool_handler.fn.__doc__ or "Query the tensor directory using natural language."
+             parameters = [
+                {"name": "prompt", "type": "string", "title": "Prompt", "required": True},
+                {"name": "params", "type": "string", "title": "Params (JSON string, optional)", "required": False}
+             ]
+
+        tools_info_list.append({
+            "name": tool_name,
+            "description": description,
+            "parameters": parameters
+        })
+    return JSONResponse(content=tools_info_list) # Return a list directly
 
 @app.get("/api/tools/{tool_name}/schema", response_class=JSONResponse)
 async def get_tool_schema(tool_name: str):
-    tool_handler = mcp_server.tools.get(tool_name)
-    if not tool_handler:
+    """
+    Returns the detailed JSON schema for a specific tool's arguments model.
+    """
+    # Access tool definition via mcp_server.router.tools_by_name
+    tool_definition = mcp_server.router.tools_by_name.get(tool_name)
+    if not tool_definition:
         raise HTTPException(status_code=404, detail="Tool not found")
 
-    if hasattr(tool_handler, 'model') and tool_handler.model:
-        return JSONResponse(content=tool_handler.model.schema())
+    if hasattr(tool_definition, 'model') and tool_definition.model:
+        return JSONResponse(content=tool_definition.model.schema())
     elif tool_name == "query_tensor_directory":
+        # Manual schema for query_tensor_directory if it doesn't have a Pydantic model
+        # for its main 'prompt' argument in the standard way.
         return JSONResponse(content={
-            "title": "QueryTensorDirectoryArgs",
+            "title": "QueryTensorDirectoryArgs", # Matching the test expectation
             "type": "object",
             "properties": {
                 "prompt": {"title": "Prompt", "type": "string"},
@@ -87,7 +90,7 @@ async def get_tool_schema(tool_name: str):
             "required": ["prompt"]
         })
     else:
-        return JSONResponse(content={"message": "This tool does not have a Pydantic arguments model."})
+        return JSONResponse(content={"message": "This tool does not have a Pydantic arguments model or a custom schema defined."})
 
 class ExecuteToolRequest(BaseModel):
     tool_name: str
@@ -98,37 +101,24 @@ async def execute_tool_endpoint(request_data: ExecuteToolRequest):
     tool_name = request_data.tool_name
     args = request_data.args
 
-    if tool_name not in mcp_server.tools:
+    # Access tool definition via mcp_server.router.tools_by_name
+    if tool_name not in mcp_server.router.tools_by_name:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found.")
 
-    tool_definition = mcp_server.tools[tool_name]
+    tool_definition = mcp_server.router.tools_by_name[tool_name]
 
     try:
-        # The Tool.execute_tool method in FastMCP handles context creation and argument parsing.
-        # It expects `args` to be a dictionary.
-        # Pydantic validation errors during args parsing within execute_tool will be raised.
         result = await tool_definition.execute_tool(args)
-
-        # The result from tool_definition.execute_tool might already be a Response object
-        # or the direct data. If it's a FastMCP Response, we might want to extract its body.
-        # For now, assume it's the direct data or a JSON-serializable dict.
-        # If 'result' is a Pydantic model itself for some tools, FastAPI will handle serialization.
         return {"success": True, "result": result}
 
-    except ValidationError as ve: # Catch Pydantic validation errors specifically
-        # These errors occur if `args` are invalid for the tool's model
-        # `tool_definition.execute_tool` should raise this if parsing fails.
+    except ValidationError as ve:
         raise HTTPException(status_code=422, detail={"error_type": "Validation Error", "errors": ve.errors()})
-    except HTTPException: # Re-raise HTTPExceptions if they were raised by the tool itself
+    except HTTPException:
         raise
     except Exception as e:
-        # Catch any other exceptions during tool execution
-        # Log the exception server-side for debugging
-        print(f"Error executing tool '{tool_name}' with args {args}: {type(e).__name__} - {e}") # Basic logging
-        # Return a generic error to the client
+        print(f"Error executing tool '{tool_name}' with args {args}: {type(e).__name__} - {e}")
         raise HTTPException(status_code=500, detail={"error_type": str(type(e).__name__), "message": str(e)})
 
-# Keep the uvicorn run command for direct execution if needed
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("tensordirectory.playground.main:app", host="0.0.0.0", port=8080, reload=True)

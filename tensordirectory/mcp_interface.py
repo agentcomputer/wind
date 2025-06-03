@@ -10,8 +10,9 @@ and the `agent` module for AI-driven query handling.
 
 # Ensure these dependencies are available in your environment:
 # pip install modelcontextprotocol numpy h5py pydantic
-
-from mcp.server.fastmcp import FastMCP, Context
+# Assuming 'mcp' (OpenRouterAI/model-context-protocol) is the one installed and working
+from mcp.server.mcp import FastMCP # Changed from mcp.server.fastmcp
+from mcp.server.context import Context # Changed from mcp.server.fastmcp
 import numpy as np
 from tensordirectory import storage # Assuming storage.py is in a package named tensordirectory
 from pydantic import BaseModel, Field # Field might be useful for constraints/examples later

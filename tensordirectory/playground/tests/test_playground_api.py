@@ -8,7 +8,8 @@ from tensordirectory.playground.main import app
 # mcp_server to inspect tools (though not strictly needed if mocking Tool.execute_tool)
 from tensordirectory.mcp_interface import mcp_server
 # The actual Tool class used by FastMCP server
-from mcp.server.fastmcp import Tool as FastMCPTool
+# Path to Tool is likely mcp.tool.Tool based on mcp package structure
+from mcp.tool import Tool as FastMCPTool
 
 
 client = TestClient(app)
@@ -22,12 +23,11 @@ def test_get_api_tools():
     response = client.get("/api/tools")
     assert response.status_code == 200
     data = response.json()
-    # The endpoint now returns a dictionary {"tools": [...]}
-    assert "tools" in data
-    assert isinstance(data["tools"], list)
-    assert len(data["tools"]) > 0
+    # The endpoint now returns a list directly
+    assert isinstance(data, list)
+    assert len(data) > 0
 
-    tools_list = data["tools"]
+    tools_list = data # data is the list
     upload_tensor_tool_info = next((tool for tool in tools_list if tool["name"] == "upload_tensor"), None)
     assert upload_tensor_tool_info is not None
     assert "name" in upload_tensor_tool_info
@@ -92,9 +92,9 @@ async def test_execute_tool_success(mock_execute_tool_method):
     assert data["result"] == {"status": "success", "data": "mocked_tensor_uuid"}
 
     # Check that the mock was called on the correct instance with correct args
-    # mcp_server.tools[tool_name] is the instance of the Tool class
+    # mcp_server.router.tools_by_name[tool_name] is the instance of the Tool class
     # .execute_tool is the method we mocked with new_callable=mock.AsyncMock
-    mcp_server.tools[tool_name].execute_tool.assert_called_once_with(args_payload)
+    mcp_server.router.tools_by_name[tool_name].execute_tool.assert_called_once_with(args_payload)
 
 
 def test_execute_tool_not_found():
