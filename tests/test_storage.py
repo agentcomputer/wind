@@ -22,14 +22,14 @@ class TestStorage(unittest.TestCase):
         # or here if all tests expect it to be pre-initialized.
         # For clarity, often it's better to let each test manage its specific setup if needed,
         # but for this structure, initializing here is fine as most tests will need it.
-        storage._initialize_hdf5() 
+        storage._initialize_hdf5()
 
     def tearDown(self):
         # Clean up the test file after each test
         if os.path.exists(TEST_HDF5_FILE):
             os.remove(TEST_HDF5_FILE)
         # Reset HDF5_FILE_NAME if it's a global in storage that might affect other tests/modules
-        # This simple assignment works because Python modules are singletons. 
+        # This simple assignment works because Python modules are singletons.
         # If storage.py was more complex, might need a more robust way to reset.
         # For now, we assume storage.py will re-evaluate its HDF5_FILE_NAME on next import or use,
         # or that this test suite is the only user during its run.
@@ -59,7 +59,7 @@ class TestStorage(unittest.TestCase):
         tensor_name = "test_tensor_1"
         description = "A test tensor"
         data = np.array([[1, 2], [3, 4]], dtype=np.int32)
-        
+
         uuid_val = storage.save_tensor(name=tensor_name, description=description, tensor_data=data)
         self.assertIsInstance(uuid_val, str)
 
@@ -102,13 +102,13 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(meta1_name['description'], "first_version")
 
         uuid2 = storage.save_tensor(name=name, description="second_version", tensor_data=data2)
-        self.assertNotEqual(uuid1, uuid2) 
-        
+        self.assertNotEqual(uuid1, uuid2)
+
         ret_data2_name, meta2_name = storage.get_tensor_by_name(name)
         np.testing.assert_array_equal(ret_data2_name, data2)
         self.assertEqual(meta2_name['description'], "second_version")
         self.assertEqual(meta2_name['original_dtype'], str(data2.dtype))
-        
+
         # Old UUID should still fetch the old data
         ret_data_uuid1, meta_uuid1 = storage.get_tensor_by_uuid(uuid1)
         np.testing.assert_array_equal(ret_data_uuid1, data1)
@@ -131,14 +131,14 @@ class TestStorage(unittest.TestCase):
         results_int = storage.find_tensors({"original_dtype": "int32"})
         self.assertEqual(len(results_int), 1)
         self.assertEqual(results_int[0][1]['user_name'], "t2_userB")
-        
+
         results_userA_float = storage.find_tensors({"original_dtype": "float32", "user_name": "t3_userA"})
         self.assertEqual(len(results_userA_float), 1)
         self.assertEqual(results_userA_float[0][1]['user_name'], "t3_userA")
 
         results_no_match = storage.find_tensors({"user_name": "non_existent_tensor"})
         self.assertEqual(len(results_no_match), 0)
-        
+
         results_all = storage.find_tensors({}) # Empty query should return all
         self.assertEqual(len(results_all), 3)
 
@@ -148,7 +148,7 @@ class TestStorage(unittest.TestCase):
             ("int_1d", np.array([1, 2, 3], dtype=np.int32)),
             ("float_2d", np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)),
             ("bool_3d", np.array([[[True, False], [False, True]]], dtype=np.bool_)),
-            ("empty_array", np.array([], dtype=np.float64)) 
+            ("empty_array", np.array([], dtype=np.float64))
         ]
         for name, data in test_cases:
             with self.subTest(name=name):
@@ -164,7 +164,7 @@ class TestStorage(unittest.TestCase):
         code_full = "def predict(data): return data * 2"
         weights_full = np.array([1.0, 2.0, 3.0])
         uuid_full = storage.save_model(model_name_full, desc_full, model_weights=weights_full, model_code=code_full)
-        
+
         ret_model_full_uuid = storage.get_model_by_uuid(uuid_full)
         self.assertIsNotNone(ret_model_full_uuid)
         self.assertEqual(ret_model_full_uuid['metadata']['user_name'], model_name_full)
@@ -184,7 +184,7 @@ class TestStorage(unittest.TestCase):
         desc_code_only = "Model with only code"
         code_code_only = "def transform(x): return x + 1"
         uuid_code_only = storage.save_model(model_name_code_only, desc_code_only, model_code=code_code_only)
-        
+
         ret_model_code_only = storage.get_model_by_uuid(uuid_code_only)
         self.assertIsNotNone(ret_model_code_only)
         self.assertEqual(ret_model_code_only['metadata']['user_name'], model_name_code_only)
@@ -240,7 +240,7 @@ class TestStorage(unittest.TestCase):
         tensor_name = "empty_tensor"
         description = "An empty tensor"
         data = np.array([]) # Empty numpy array
-        
+
         uuid_val = storage.save_tensor(name=tensor_name, description=description, tensor_data=data)
         self.assertIsInstance(uuid_val, str)
 

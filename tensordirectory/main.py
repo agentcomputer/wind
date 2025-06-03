@@ -32,7 +32,7 @@ except ImportError as e:
 # Configure basic logging
 # MCP server itself will also have logging, this is for main.py specific messages.
 logging.basicConfig(
-    stream=sys.stdout, 
+    stream=sys.stdout,
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )

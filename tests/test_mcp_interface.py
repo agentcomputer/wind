@@ -1,18 +1,18 @@
 # tests/test_mcp_interface.py
 import unittest
-from unittest.mock import patch, AsyncMock, MagicMock 
+from unittest.mock import patch, AsyncMock, MagicMock
 # AsyncMock for async functions, MagicMock for synchronous or context
 import numpy as np
 import asyncio # Required for IsolatedAsyncioTestCase if not using it directly
 
 # Assuming tensordirectory is in PYTHONPATH or project is structured as a package
 from tensordirectory.mcp_interface import (
-    upload_tensor_resource,
-    upload_model_resource,
+    upload_tensor, # Updated name
+    upload_model,  # Updated name
     query_tensor_directory,
     mcp_server, # To check instance
-    TensorUploadRequest, # Import Pydantic model
-    ModelUploadRequest   # Import Pydantic model
+    TensorUploadArgs, # Updated Pydantic model name
+    ModelUploadArgs   # Updated Pydantic model name
 )
 from mcp.server.fastmcp import FastMCP, Context # For type checking and mock context
 
@@ -35,14 +35,14 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_02_upload_tensor_resource_success(self, mock_save_tensor):
         mock_uuid = "test-tensor-uuid-123"
         mock_save_tensor.return_value = mock_uuid
-        
+
         tensor_list_data = [[1, 2], [3, 4]]
-        request_data = TensorUploadRequest(
+        request_args = TensorUploadArgs( # Use updated model name
             name="test_tensor",
             description="A test tensor",
             tensor_data=tensor_list_data
         )
-        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
+        response = await upload_tensor(self.mock_ctx, args=request_args) # Call updated function name and use args=
 
         mock_save_tensor.assert_called_once()
         args, kwargs = mock_save_tensor.call_args_list[0] # Get the first call's arguments
@@ -51,7 +51,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_array_equal(kwargs['tensor_data'], np.array(tensor_list_data))
         self.assertEqual(kwargs['name'], "test_tensor")
         self.assertEqual(kwargs['description'], "A test tensor")
-        
+
         self.assertEqual(response, {"uuid": mock_uuid, "name": "test_tensor", "message": "Tensor uploaded successfully"})
         self.mock_ctx.log_info.assert_any_call("Attempting to upload tensor: test_tensor")
         self.mock_ctx.log_info.assert_any_call(f"Tensor 'test_tensor' saved with UUID: {mock_uuid}")
@@ -59,9 +59,9 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
     @patch('tensordirectory.mcp_interface.storage.save_tensor', new_callable=MagicMock)
     async def test_03_upload_tensor_resource_invalid_data_empty(self, mock_save_tensor):
-        request_data = TensorUploadRequest(name="invalid_tensor", description="Invalid", tensor_data=[])
-        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
-        
+        request_args = TensorUploadArgs(name="invalid_tensor", description="Invalid", tensor_data=[]) # Use updated model name
+        response = await upload_tensor(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         self.assertIn("error", response)
         # The error message comes from within the handler after Pydantic validation passes for `list` type
         self.assertEqual(response["error"], "tensor_data for 'invalid_tensor' must be a non-empty list.")
@@ -73,21 +73,21 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_03b_upload_tensor_resource_value_error_on_conversion(self, mock_save_tensor):
         # This test checks if np.array() fails inside the handler
         # Pydantic will allow tensor_data=[["a", "b"], [1,2]] because it's a list of lists.
-        request_data = TensorUploadRequest(
-            name="value_error_tensor", 
-            description="Numpy conversion failure test", 
+        request_args = TensorUploadArgs( # Use updated model name
+            name="value_error_tensor",
+            description="Numpy conversion failure test",
             tensor_data=[["a", "b"], [1,2]] # This will cause np.array() to likely raise ValueError
         )
         # Mock save_tensor to do nothing as it won't be reached if np.array fails
         # or if it's reached, we don't care about its return for this test.
-        
-        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
-        
+
+        response = await upload_tensor(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         self.assertIn("error", response)
         self.assertTrue(response["error"].startswith("Invalid tensor data format for 'value_error_tensor':"))
         mock_save_tensor.assert_not_called() # Should fail before saving
         self.mock_ctx.log_error.assert_any_call(
-            "ValueError during tensor conversion for 'value_error_tensor': object of too small depth for desired array", 
+            "ValueError during tensor conversion for 'value_error_tensor': object of too small depth for desired array",
             exc_info=True
         ) # Check for the specific log, actual error message from np might vary.
 
@@ -96,9 +96,9 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
 
     @patch('tensordirectory.mcp_interface.storage.save_tensor', return_value=None)
     async def test_04_upload_tensor_resource_storage_failure(self, mock_save_tensor_failure):
-        request_data = TensorUploadRequest(name="fail_tensor", description="Fail save", tensor_data=[[1]])
-        response = await upload_tensor_resource(self.mock_ctx, data=request_data)
-        
+        request_args = TensorUploadArgs(name="fail_tensor", description="Fail save", tensor_data=[[1]]) # Use updated model name
+        response = await upload_tensor(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save tensor 'fail_tensor'")
         mock_save_tensor_failure.assert_called_once()
@@ -109,14 +109,14 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_05_upload_model_resource_success_code_only(self, mock_save_model):
         mock_uuid = "test-model-uuid-456"
         mock_save_model.return_value = mock_uuid
-        
-        request_data = ModelUploadRequest(
-            name="code_model", 
-            description="Code only", 
+
+        request_args = ModelUploadArgs( # Use updated model name
+            name="code_model",
+            description="Code only",
             model_code="print('hi')"
         )
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
-        
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         mock_save_model.assert_called_once_with(name="code_model", description="Code only", model_weights=None, model_code="print('hi')")
         self.assertEqual(response, {"uuid": mock_uuid, "name": "code_model", "message": "Model uploaded successfully"})
         self.mock_ctx.log_info.assert_any_call("Attempting to upload model: code_model")
@@ -127,15 +127,15 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_06_upload_model_resource_success_weights_only(self, mock_save_model):
         mock_uuid = "test-model-uuid-789"
         mock_save_model.return_value = mock_uuid
-        
+
         weights_list = [[1.0, 2.0], [3.0, 4.0]]
-        request_data = ModelUploadRequest(
-            name="weights_model", 
-            description="Weights only", 
+        request_args = ModelUploadArgs( # Use updated model name
+            name="weights_model",
+            description="Weights only",
             model_weights=weights_list
         )
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
-        
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         args, kwargs = mock_save_model.call_args_list[0]
         self.assertIsInstance(kwargs['model_weights'], np.ndarray)
         np.testing.assert_array_equal(kwargs['model_weights'], np.array(weights_list))
@@ -154,14 +154,14 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
         weights_list = [[1.0, 2.0]]
         code_str = "def predict(): pass"
         weights_list_for_cw = [[1.0, 2.0]] # Use a different var name to avoid conflict if setUp uses it
-        request_data = ModelUploadRequest(
-            name="cw_model", 
-            description="Code & Weights", 
-            model_weights=weights_list_for_cw, 
+        request_args = ModelUploadArgs( # Use updated model name
+            name="cw_model",
+            description="Code & Weights",
+            model_weights=weights_list_for_cw,
             model_code=code_str
         )
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
-        
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         args, kwargs = mock_save_model.call_args_list[0]
         self.assertIsInstance(kwargs['model_weights'], np.ndarray)
         np.testing.assert_array_equal(kwargs['model_weights'], np.array(weights_list))
@@ -173,9 +173,9 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     @patch('tensordirectory.mcp_interface.storage.save_model', new_callable=MagicMock)
     async def test_07_upload_model_resource_no_code_no_weights(self, mock_save_model):
         # self.mock_ctx is used from setUp
-        request_data = ModelUploadRequest(name="empty_model", description="Empty") # No model_code or model_weights
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
-        
+        request_args = ModelUploadArgs(name="empty_model", description="Empty") # No model_code or model_weights
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
+
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Either model_weights or model_code must be provided.")
         mock_save_model.assert_not_called()
@@ -187,12 +187,12 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_07b_upload_model_resource_value_error_on_conversion(self, mock_save_model):
         # Pydantic ensures model_weights is a list if provided.
         # This test is for when np.array(list_data) fails.
-        request_data = ModelUploadRequest(
-            name="invalid_weights_model", 
-            description="Test numpy conversion error", 
+        request_args = ModelUploadArgs( # Use updated model name
+            name="invalid_weights_model",
+            description="Test numpy conversion error",
             model_weights=[["a", "b"], [1,2]] # This should cause np.array to fail
         )
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
 
         self.assertIn("error", response)
         self.assertTrue(response["error"].startswith("Invalid model_weights data format for 'invalid_weights_model':"))
@@ -205,11 +205,11 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     @patch('tensordirectory.mcp_interface.storage.save_model', return_value=None)
     async def test_07c_upload_model_resource_storage_failure(self, mock_save_model):
         request_data = ModelUploadRequest(
-            name="fail_model", 
-            description="Will fail", 
+            name="fail_model",
+            description="Will fail",
             model_code="pass"
         )
-        response = await upload_model_resource(self.mock_ctx, data=request_data)
+        response = await upload_model(self.mock_ctx, args=request_args) # Call updated function name and use args=
 
         self.assertIn("error", response)
         self.assertEqual(response["error"], "Failed to save model 'fail_model'")
@@ -222,7 +222,7 @@ class TestMCPInterface(unittest.IsolatedAsyncioTestCase):
     async def test_08_query_tensor_directory_tool(self, mock_invoke_agent_query):
         mock_agent_response = "Agent says hello!"
         mock_invoke_agent_query.return_value = mock_agent_response
-        
+
         # self.mock_ctx is already set up in setUp()
         prompt_text = "What is tensor X?"
         params_dict = {"detail": "high"}
