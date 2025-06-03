@@ -24,7 +24,7 @@ class MockGeminiResponse:
     @property
     def text(self):
         return self.text_content
-    
+
     @property
     def parts(self): # Make parts accessible
         return self._parts
@@ -43,8 +43,8 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         # Reset global gemini_model for isolation.
         # Tests that need a configured model should set this up via ensure_gemini_configured (mocked)
         # or by directly assigning a mock to agent.gemini_model.
-        agent.gemini_model = None 
-        
+        agent.gemini_model = None
+
         self.mock_ctx = MagicMock(spec=Context)
         self.mock_ctx.log_info = AsyncMock()
         self.mock_ctx.log_error = AsyncMock()
@@ -57,17 +57,17 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
     def test_01_ensure_gemini_configured_success(self, mock_gen_model_constructor, mock_genai_configure, mock_getenv):
         mock_getenv.return_value = "fake_api_key"
         # Ensure gemini_model is None before the call, so configuration proceeds.
-        agent.gemini_model = None 
-        
+        agent.gemini_model = None
+
         # Have the constructor return our specific mock instance
         mock_model_instance = MockGenerativeModel()
         mock_gen_model_constructor.return_value = mock_model_instance
 
-        ensure_gemini_configured() 
-        
+        ensure_gemini_configured()
+
         mock_getenv.assert_called_with("GEMINI_API_KEY")
         mock_genai_configure.assert_called_with(api_key="fake_api_key")
-        mock_gen_model_constructor.assert_called_with('gemini-pro') 
+        mock_gen_model_constructor.assert_called_with('gemini-pro')
         self.assertIs(agent.gemini_model, mock_model_instance) # Check if the global is set
 
     @patch('tensordirectory.agent.os.getenv', return_value=None)
@@ -89,7 +89,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         agent.gemini_model = mock_model_instance # Directly assign the mock model
 
         result = await analyze_prompt_with_gemini("get tensor t1", self.mock_ctx)
-        
+
         self.assertEqual(result, {"intent": "get_tensor", "entities": {"tensor_name": "t1"}})
         mock_model_instance.generate_content_async.assert_called_once()
         self.mock_ctx.log_info.assert_any_call(f"Raw Gemini response: {gemini_json_response}")
@@ -104,7 +104,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         agent.gemini_model = mock_model_instance
 
         result = await analyze_prompt_with_gemini("some prompt", self.mock_ctx)
-        
+
         self.assertIn("error", result)
         self.assertTrue(result["error"].startswith("Failed to parse Gemini response as JSON"))
         self.assertEqual(result["raw_response"], malformed_json)
@@ -117,14 +117,14 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         agent.gemini_model = mock_model_instance
 
         result = await analyze_prompt_with_gemini("any prompt", self.mock_ctx)
-        
+
         self.assertIn("error", result)
         self.assertEqual(result["error"], "Gemini API call failed: Gemini API Down")
         self.mock_ctx.log_error.assert_called()
-    
+
     @patch('tensordirectory.agent.ensure_gemini_configured', side_effect=ValueError("Config error for test"))
     async def test_06_analyze_prompt_gemini_not_configured_due_to_ensure_failure(self, mock_ensure_config_fails):
-        agent.gemini_model = None 
+        agent.gemini_model = None
         result = await analyze_prompt_with_gemini("any prompt", self.mock_ctx)
         self.assertIn("error", result)
         self.assertTrue(result["error"].startswith("Gemini model not configured: Config error for test"))
@@ -132,7 +132,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
 
 
     # --- Tests for handle_query ---
-    @patch('tensordirectory.agent.ensure_gemini_configured') 
+    @patch('tensordirectory.agent.ensure_gemini_configured')
     @patch('tensordirectory.agent.analyze_prompt_with_gemini')
     @patch('tensordirectory.storage.get_tensor_by_name')
     async def test_07_handle_query_get_tensor_found(self, mock_storage_get, mock_analyze, mock_ensure_config):
@@ -142,7 +142,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         mock_storage_get.return_value = (mock_tensor_data, mock_metadata)
 
         response = await handle_query("get t1", None, self.mock_ctx)
-        
+
         mock_analyze.assert_called_once_with("get t1", self.mock_ctx)
         mock_storage_get.assert_called_once_with("t1")
         self.assertEqual(response, "Tensor 't1' found. Metadata: {'user_name': 't1', 'description': 'test desc', 'uuid': 'uuid-t1'}. Shape: (3,), Dtype: int64.")
@@ -153,7 +153,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
     async def test_08_handle_query_get_tensor_not_found(self, mock_storage_get, mock_analyze, mock_ensure_config):
         mock_analyze.return_value = {"intent": "get_tensor", "entities": {"tensor_name": "t_not_exist"}}
         mock_storage_get.return_value = (None, None)
-        
+
         response = await handle_query("get t_not_exist", None, self.mock_ctx)
         self.assertEqual(response, "Tensor 't_not_exist' not found.")
 
@@ -191,9 +191,9 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         mock_get_model.assert_called_once_with("m1")
         mock_get_input_tensor.assert_called_once_with("in1")
         mock_save_tensor.assert_called_once()
-        
+
         # Check the saved tensor data (args_save is a tuple, 0: name, 1: desc, 2: data)
-        saved_call_args = mock_save_tensor.call_args[0] 
+        saved_call_args = mock_save_tensor.call_args[0]
         self.assertEqual(saved_call_args[0], "out1")
         np.testing.assert_array_equal(saved_call_args[2], np.array([20, 40]))
 
@@ -214,7 +214,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         mock_get_input_tensor.return_value = (np.array([1]), {"user_name":"in1"}) # Input tensor is still fetched
 
         response = await handle_query("run m_err with in1", None, self.mock_ctx)
-        
+
         self.assertEqual(response, "Error during model execution for 'm_err': custom exec error")
         self.mock_ctx.log_error.assert_any_call("Exception during model code execution for 'm_err': custom exec error", exc_info=True)
 

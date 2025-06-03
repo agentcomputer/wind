@@ -17,17 +17,17 @@ from tensordirectory import storage # Assuming storage.py is in a package named 
 from pydantic import BaseModel
 from typing import Optional, List # List is used for more specific typing if needed, Optional for optional fields.
 
-# Pydantic Models for Request Body Validation
-class TensorUploadRequest(BaseModel):
+# Pydantic Models for Tool Arguments / Resource Payloads
+# (Previously TensorUploadRequest and ModelUploadRequest, renamed for clarity if used as general args)
+class TensorUploadArgs(BaseModel):
     name: str
     description: str
-    tensor_data: list # Using Python's built-in list type as per plan; can be List[any] essentially.
-                      # For more specific structures like a 2D list of floats: List[List[float]]
+    tensor_data: list # Using Python's built-in list type as per plan
 
-class ModelUploadRequest(BaseModel):
+class ModelUploadArgs(BaseModel):
     name: str
     description: str
-    model_weights: Optional[list] = None # Using Python's built-in list type.
+    model_weights: Optional[list] = None # Using Python's built-in list type
     model_code: Optional[str] = None
 
 # Initialize MCP Server
@@ -51,40 +51,40 @@ async def invoke_agent_query(prompt: str, params: dict | None, ctx: Context) -> 
     # to call it if the agent module was fully integrated here.
     # For now, keeping as a distinct placeholder as per original structure for mcp_interface.
     # If agent.py is available in sys.path:
-    from . import agent 
+    from . import agent
     return await agent.handle_query(user_prompt=prompt, params=params, ctx=ctx)
 
 
-@mcp_server.resource("tensordirectory://tensors/upload")
-async def upload_tensor_resource(data: TensorUploadRequest, ctx: Context) -> dict:
+@mcp_server.tool()
+async def upload_tensor(ctx: Context, args: TensorUploadArgs) -> dict:
     """
-    MCP Resource handler for uploading a new tensor.
+    MCP Tool for uploading a new tensor.
 
     Args:
-        data: A TensorUploadRequest Pydantic model instance containing 'name', 
+        args: A TensorUploadArgs Pydantic model instance containing 'name',
               'description', and 'tensor_data'.
         ctx: The MCP Context object.
 
     Returns:
         A dictionary with operation status, UUID of the saved tensor, and name.
     """
-    # Parameters are now accessed as attributes from the Pydantic model 'data'
+    # Parameters are now accessed as attributes from the Pydantic model 'args'
     # Pydantic performs validation for presence and basic type of name, description, tensor_data.
-    name = data.name
-    description = data.description
-    tensor_data_list = data.tensor_data 
+    name = args.name
+    description = args.description
+    tensor_data_list = args.tensor_data
 
     await ctx.log_info(f"Attempting to upload tensor: {name}")
     try:
         # Pydantic ensures tensor_data_list is a list.
         # Still, we might want to check if it's an empty list if that's not allowed.
-        if not tensor_data_list: 
+        if not tensor_data_list:
             await ctx.log_error(f"tensor_data for '{name}' must be a non-empty list.")
             return {"error": f"tensor_data for '{name}' must be a non-empty list."}
-        
+
         arr = np.array(tensor_data_list)
         # Further validation can be added here (e.g., check dimensions, specific dtype compatibility)
-        
+
         tensor_uuid = storage.save_tensor(name=name, description=description, tensor_data=arr)
         if tensor_uuid:
             await ctx.log_info(f"Tensor '{name}' saved with UUID: {tensor_uuid}")
@@ -99,13 +99,13 @@ async def upload_tensor_resource(data: TensorUploadRequest, ctx: Context) -> dic
         await ctx.log_error(f"Exception uploading tensor '{name}': {e}", exc_info=True)
         return {"error": f"An unexpected error occurred while uploading tensor '{name}': {str(e)}"}
 
-@mcp_server.resource("tensordirectory://models/upload")
-async def upload_model_resource(data: ModelUploadRequest, ctx: Context) -> dict:
+@mcp_server.tool()
+async def upload_model(ctx: Context, args: ModelUploadArgs) -> dict:
     """
-    MCP Resource handler for uploading a new model (code, weights, or both).
+    MCP Tool for uploading a new model (code, weights, or both).
 
     Args:
-        data: A ModelUploadRequest Pydantic model instance containing 'name', 
+        args: A ModelUploadArgs Pydantic model instance containing 'name',
               'description', and optionally 'model_weights' and/or 'model_code'.
         ctx: The MCP Context object.
 
@@ -114,10 +114,10 @@ async def upload_model_resource(data: ModelUploadRequest, ctx: Context) -> dict:
     """
     # Required fields are validated by Pydantic.
     # Optional fields will be None if not provided.
-    name = data.name
-    description = data.description
-    model_weights_list = data.model_weights 
-    model_code = data.model_code
+    name = args.name
+    description = args.description
+    model_weights_list = args.model_weights
+    model_code = args.model_code
 
     await ctx.log_info(f"Attempting to upload model: {name}")
     try:

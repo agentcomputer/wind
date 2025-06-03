@@ -42,17 +42,17 @@ def _initialize_hdf5():
 
         if '/indices/tensor_name_to_uuid' not in hf:
             # Create an empty, resizable dataset to store (name, uuid) pairs
-            hf.create_dataset('/indices/tensor_name_to_uuid', 
-                              shape=(0, 2), 
-                              maxshape=(None, 2), 
+            hf.create_dataset('/indices/tensor_name_to_uuid',
+                              shape=(0, 2),
+                              maxshape=(None, 2),
                               dtype=string_dt,
                               chunks=True)
-            
+
         if '/indices/model_name_to_uuid' not in hf:
             # Create an empty, resizable dataset to store (name, uuid) pairs
-            hf.create_dataset('/indices/model_name_to_uuid', 
-                              shape=(0, 2), 
-                              maxshape=(None, 2), 
+            hf.create_dataset('/indices/model_name_to_uuid',
+                              shape=(0, 2),
+                              maxshape=(None, 2),
                               dtype=string_dt,
                               chunks=True)
 
@@ -90,24 +90,24 @@ def save_tensor(name: str, description: str, tensor_data: np.ndarray) -> str:
         # Update tensor_name_to_uuid mapping
         mapping_path = '/indices/tensor_name_to_uuid'
         mappings = hf[mapping_path]
-        
+
         # Convert to list for easier manipulation
         mappings_list = list(mappings[:])
-        
+
         name_exists = False
         for i, (existing_name, _) in enumerate(mappings_list):
             if existing_name == name:
                 mappings_list[i] = (name, tensor_uuid)
                 name_exists = True
                 break
-        
+
         if not name_exists:
             mappings_list.append((name, tensor_uuid))
-        
+
         # Resize and write back
         if len(mappings_list) > mappings.shape[0] :
              mappings.resize((len(mappings_list), 2))
-        
+
         # Ensure data is in NumPy array format before writing
         # This step can be tricky with variable length strings if not handled correctly.
         # h5py expects a NumPy array (or similar) for dataset writes.
@@ -146,7 +146,7 @@ def get_tensor_by_uuid(uuid_str: str) -> tuple[np.ndarray | None, dict | None]:
                 tensor_data = dset[:]
                 metadata = dict(dset.attrs)
                 # Add the UUID to the metadata dict for convenience for the caller
-                metadata['uuid'] = uuid_str 
+                metadata['uuid'] = uuid_str
                 return tensor_data, metadata
             else:
                 return None, None
@@ -178,13 +178,13 @@ def get_tensor_by_name(name: str) -> tuple[np.ndarray | None, dict | None]:
                 return None, None # Index itself doesn't exist
 
             mappings = hf[mapping_path][:]
-            
+
             found_uuid = None
             for stored_name, stored_uuid in mappings:
                 if stored_name == name:
                     found_uuid = stored_uuid
                     break
-            
+
             if found_uuid:
                 return get_tensor_by_uuid(found_uuid)
             else:
@@ -218,13 +218,13 @@ def find_tensors(metadata_query: dict) -> list[tuple[np.ndarray, dict]]:
             for uuid_str in tensors_group:
                 dset = tensors_group[uuid_str]
                 metadata = dict(dset.attrs)
-                
+
                 match = True
                 for query_key, query_value in metadata_query.items():
                     if metadata.get(query_key) != query_value:
                         match = False
                         break
-                
+
                 if match:
                     tensor_data = dset[:]
                     matches.append((tensor_data, metadata))
@@ -287,20 +287,20 @@ def save_model(name: str, description: str, model_weights: np.ndarray | None = N
                 mappings_list[i] = (name, model_uuid)
                 name_exists = True
                 break
-        
+
         if not name_exists:
             mappings_list.append((name, model_uuid))
-        
+
         if len(mappings_list) > mappings.shape[0]:
             mappings.resize((len(mappings_list), 2))
-        
+
         if mappings_list:
             string_dt = h5py.string_dtype(encoding='utf-8')
             new_mappings_arr = np.array(mappings_list, dtype=string_dt)
             hf[mapping_path][:] = new_mappings_arr
         elif mappings.shape[0] > 0:
             hf[mapping_path].resize((0,2))
-            
+
     return model_uuid
 
 def get_model_by_uuid(uuid_str: str) -> dict | None:
@@ -323,11 +323,11 @@ def get_model_by_uuid(uuid_str: str) -> dict | None:
 
             model_group = hf[model_group_path]
             metadata = dict(model_group.attrs)
-            
+
             model_weights = None
             if 'weights' in model_group:
                 model_weights = model_group['weights'][:]
-            
+
             model_code = None
             if 'code' in model_group:
                 # Data is stored as bytes, needs decoding if it's not auto-handled by string_dt read
@@ -336,7 +336,7 @@ def get_model_by_uuid(uuid_str: str) -> dict | None:
                      model_code = code_data.decode('utf-8')
                 else: # Should be a string if stored with h5py.string_dtype
                     model_code = code_data
-            
+
             # Add the UUID to the metadata dict for convenience
             metadata['uuid'] = uuid_str
 
@@ -371,13 +371,13 @@ def get_model_by_name(name: str) -> dict | None:
                 return None # Index itself doesn't exist
 
             mappings = hf[mapping_path][:]
-            
+
             found_uuid = None
             for stored_name, stored_uuid in mappings:
                 if stored_name == name:
                     found_uuid = stored_uuid
                     break
-            
+
             if found_uuid:
                 return get_model_by_uuid(found_uuid)
             else:

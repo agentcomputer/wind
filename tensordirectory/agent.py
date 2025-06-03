@@ -44,10 +44,10 @@ def ensure_gemini_configured():
         # In a real MCP context, this error should be surfaced to the user/operator
         # For now, we'll let it fail if the agent is called without it.
         raise ValueError("GEMINI_API_KEY not configured.")
-    
+
     if gemini_model is None:
         try:
-            # Note: The issue specified "gemini-2.0-flash". 
+            # Note: The issue specified "gemini-2.0-flash".
             # The google-generativeai SDK might use a model alias like "gemini-pro" or "gemini-1.5-flash-latest".
             # Using "gemini-pro" as a common default if "gemini-2.0-flash" isn't a direct identifier.
             # Update if a more specific/correct identifier for "gemini-2.0-flash" is confirmed for the SDK.
@@ -112,7 +112,7 @@ async def analyze_prompt_with_gemini(user_prompt_text: str, ctx: Context) -> dic
     await ctx.log_info(f"Sending prompt to Gemini: {user_prompt_text}")
     try:
         response = await gemini_model.generate_content_async(gemini_system_prompt)
-        
+
         raw_response_text = ""
         # Iterating parts if response is chunked/streamed, though for single generation it's usually direct.
         # Some SDK versions/models might return parts. For gemini-pro, response.text should be fine.
@@ -122,7 +122,7 @@ async def analyze_prompt_with_gemini(user_prompt_text: str, ctx: Context) -> dic
              for part in response.parts:
                  if hasattr(part, 'text'):
                      raw_response_text += part.text
-        
+
         raw_response_text = raw_response_text.strip()
         await ctx.log_info(f"Raw Gemini response: {raw_response_text}")
 
@@ -185,7 +185,7 @@ async def handle_query(user_prompt: str, params: dict | None, ctx: Context) -> s
         tensor_name = entities.get("tensor_name")
         if not tensor_name:
             return "Error: Gemini analysis did not provide 'tensor_name' for get_tensor intent."
-        
+
         data, metadata = storage.get_tensor_by_name(tensor_name)
         if data is not None and metadata is not None:
             return f"Tensor '{tensor_name}' found. Metadata: {metadata}. Shape: {data.shape}, Dtype: {data.dtype}."
@@ -196,7 +196,7 @@ async def handle_query(user_prompt: str, params: dict | None, ctx: Context) -> s
         metadata_query = entities.get("metadata_query")
         if not metadata_query or not isinstance(metadata_query, dict):
             return "Error: Gemini analysis did not provide valid 'metadata_query' for find_tensors intent."
-        
+
         results = storage.find_tensors(metadata_query)
         if results:
             summary_list = []
@@ -227,25 +227,25 @@ async def handle_query(user_prompt: str, params: dict | None, ctx: Context) -> s
 
         if model_data.get("code"):
             await ctx.log_warning(f"Attempting to execute model code for '{model_name}' using exec(). SECURITY RISK: Untrusted code execution.")
-            
+
             input_tensors_dict = {}
             for name in input_tensor_names:
                 tensor_data, _ = storage.get_tensor_by_name(name)
                 if tensor_data is None:
                     return f"Error: Input tensor '{name}' not found for inference."
                 input_tensors_dict[name] = tensor_data
-            
-            exec_globals = {'np': np} 
+
+            exec_globals = {'np': np}
             exec_locals = {'input_tensors_dict': input_tensors_dict}
 
             try:
                 exec(model_data['code'], exec_globals, exec_locals)
-                
+
                 if 'predict' not in exec_locals or not callable(exec_locals['predict']):
                     return f"Error: Model code for '{model_name}' does not define a callable 'predict(input_tensors_dict)' function."
 
                 # Assuming predict function takes one argument: a dictionary of input tensors
-                output_tensor = exec_locals['predict'](input_tensors_dict) 
+                output_tensor = exec_locals['predict'](input_tensors_dict)
 
                 if not isinstance(output_tensor, np.ndarray):
                      return f"Error: 'predict' function in model '{model_name}' did not return a NumPy array."
@@ -258,15 +258,15 @@ async def handle_query(user_prompt: str, params: dict | None, ctx: Context) -> s
 
                 final_output_name = output_tensor_name_suggestion or f"inference_output_{model_name}_{timestamp}_{str(uuid.uuid4())[:8]}"
                 output_description = f"Output from model '{model_name}' using inputs: {', '.join(input_tensor_names)} at {timestamp}"
-                
+
                 output_uuid = storage.save_tensor(name=final_output_name, description=output_description, tensor_data=output_tensor)
-                
+
                 return f"Inference successful with model '{model_name}'. Output tensor saved as '{final_output_name}' (UUID: {output_uuid})."
 
             except Exception as e:
                 await ctx.log_error(f"Exception during model code execution for '{model_name}': {e}", exc_info=True)
                 return f"Error during model execution for '{model_name}': {str(e)}"
-        
+
         elif model_data.get("weights") is not None: # Check if 'weights' is not None
              return f"Model '{model_name}' found, but it only has weights and no executable code. Direct execution of weights-only models is not yet supported by this agent."
         else:
@@ -274,8 +274,8 @@ async def handle_query(user_prompt: str, params: dict | None, ctx: Context) -> s
 
     elif intent == "unknown":
         return f"The intent of your request is unclear or not supported. Please try rephrasing. User prompt: '{user_prompt}'"
-        
-    else: 
+
+    else:
         return f"Unhandled intent '{intent}'. Please check agent logic or prompt engineering. Entities: {entities}"
 
     return "Error: Reached end of handle_query without returning a specific response." # Fallback

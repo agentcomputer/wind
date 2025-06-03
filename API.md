@@ -6,15 +6,16 @@ This document provides details on the Model Context Protocol (MCP) interface for
 
 ---
 
-## Resource: `tensordirectory://tensors/upload`
+## Tool: `upload_tensor`
 
 **Description:**
-This resource is used to upload tensor data along with its metadata to the TensorDirectory.
+This tool is used to upload tensor data along with its metadata to the TensorDirectory.
 
 **Method:**
-MCP Resource (client typically uses a method analogous to HTTP POST or PUT).
+MCP Tool. Clients typically invoke this by providing the tool name (`upload_tensor`) and an arguments object.
 
 **Parameters:**
+The tool accepts a single argument object (e.g., `args` when calling the tool function) with the following fields, corresponding to the `TensorUploadArgs` Pydantic model:
 
 *   `name: str` (Required)
     *   A user-defined name for the tensor. This name can be used for later retrieval.
@@ -23,7 +24,7 @@ MCP Resource (client typically uses a method analogous to HTTP POST or PUT).
 *   `tensor_data: list` (Required)
     *   The actual tensor data, represented as a nested list of numbers. This list should be structured in a way that can be directly converted into a NumPy array (e.g., a list of lists for a 2D tensor).
 
-**Example Request Body (conceptual JSON for client):**
+**Example Arguments for Tool Call (conceptual JSON representation of `TensorUploadArgs`):**
 
 ```json
 {
@@ -37,9 +38,9 @@ MCP Resource (client typically uses a method analogous to HTTP POST or PUT).
 }
 ```
 
-**Example Success Response (JSON body):**
+**Example Success Response (JSON body returned by the tool function):**
 
-Upon successful upload, the service returns a JSON object containing the generated unique ID (UUID) for the tensor, its given name, and a success message.
+Upon successful upload, the tool returns a JSON object containing the generated unique ID (UUID) for the tensor, its given name, and a success message.
 
 ```json
 {
@@ -49,13 +50,13 @@ Upon successful upload, the service returns a JSON object containing the generat
 }
 ```
 
-**Example Error Response (JSON body):**
+**Example Error Response (JSON body returned by the tool function):**
 
-If an error occurs (e.g., invalid data format, storage failure), an error message is returned.
+If an error occurs (e.g., invalid data format, storage failure), an error message is returned. Pydantic validation errors for the arguments object are typically handled by the FastMCP framework before the tool function is called, resulting in a framework-level error response (e.g., HTTP 422).
 
 ```json
 {
-    "error": "Invalid tensor data format for 'my_feature_vector_v2': Input tensor_data must be a non-empty list."
+    "error": "tensor_data for 'my_feature_vector_v2' must be a non-empty list."
 }
 ```
 ```json
@@ -66,25 +67,29 @@ If an error occurs (e.g., invalid data format, storage failure), an error messag
 
 ---
 
-## Resource: `tensordirectory://models/upload`
+## Tool: `upload_model`
 
 **Description:**
-This resource is used to upload inference models to the TensorDirectory. A model can consist of Python code, NumPy array weights, or both.
+This tool is used to upload inference models to the TensorDirectory. A model can consist of Python code, NumPy array weights, or both.
+
+**Method:**
+MCP Tool. Clients typically invoke this by providing the tool name (`upload_model`) and an arguments object.
 
 **Parameters:**
+The tool accepts a single argument object (e.g., `args` when calling the tool function) with the following fields, corresponding to the `ModelUploadArgs` Pydantic model:
 
 *   `name: str` (Required)
     *   A user-defined name for the model.
 *   `description: str` (Required)
     *   A textual description of the model, its architecture, or its intended use.
-*   `model_weights: list | None` (Optional)
+*   `model_weights: Optional[list] = None` (Optional)
     *   The model's weights, represented as a nested list of numbers (convertible to a NumPy array). Defaults to `None`.
-*   `model_code: str | None` (Optional)
+*   `model_code: Optional[str] = None` (Optional)
     *   A string containing the Python code for the model.
     *   **Important:** If `model_code` is provided, it **must** define a Python function with the signature `predict(input_tensors_dict: dict[str, np.ndarray]) -> np.ndarray`. The `input_tensors_dict` will be a dictionary where keys are user-specified input tensor names (as identified by the AI agent or during an inference call) and values are the corresponding NumPy arrays. The function must return a single NumPy array as the inference result.
     *   Defaults to `None`. At least one of `model_weights` or `model_code` must be provided.
 
-**Example Request Body (Code-only model):**
+**Example Arguments for Tool Call (conceptual JSON representation of `ModelUploadArgs` for a code-only model):**
 
 ```json
 {
@@ -94,7 +99,7 @@ This resource is used to upload inference models to the TensorDirectory. A model
 }
 ```
 
-**Example Request Body (Weights-only model):**
+**Example Arguments for Tool Call (conceptual JSON for a weights-only model):**
 
 ```json
 {
@@ -108,7 +113,7 @@ This resource is used to upload inference models to the TensorDirectory. A model
 }
 ```
 
-**Example Success Response (JSON body):**
+**Example Success Response (JSON body returned by the tool function):**
 
 ```json
 {
@@ -118,7 +123,7 @@ This resource is used to upload inference models to the TensorDirectory. A model
 }
 ```
 
-**Example Error Response (JSON body):**
+**Example Error Response (JSON body returned by the tool function):**
 
 ```json
 {
@@ -155,9 +160,8 @@ This tool allows users to interact with the TensorDirectory using natural langua
 ```python
 # Example using a hypothetical MCP client library
 # response_string = await client.call_tool(
-#     tool_uri="tensordirectory://query_tensor_directory", # Actual URI might vary by MCP setup
-#     prompt="What are the details for tensor 'my_feature_vector_v2'?",
-#     params={}
+#     tool_name="query_tensor_directory",
+#     args={"prompt": "What are the details for tensor 'my_feature_vector_v2'?", "params": {}}
 # )
 ```
 
