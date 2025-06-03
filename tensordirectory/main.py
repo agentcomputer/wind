@@ -13,6 +13,22 @@ To run the server, execute this script from the project root:
 import logging
 import sys
 
+# Check for critical external dependencies first
+try:
+    import google.generativeai
+    import mcp.server.fastmcp 
+    # You can also import specific items if preferred, e.g.:
+    # from google.generativeai import GenerativeModel
+    # from mcp.server.fastmcp import FastMCP
+except ImportError as e:
+    # Basic logging config for this specific error message
+    logging.basicConfig(stream=sys.stdout, level=logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # Use a generic logger name or the root logger for this initial check
+    logger_init_check = logging.getLogger("TensorDirectoryInitCheck")
+    logger_init_check.error(f"Missing critical external dependency: {e.name}. This package is required to run TensorDirectory.")
+    logger_init_check.error("Please install all dependencies from requirements.txt by running: `pip install -r requirements.txt`")
+    sys.exit(1)
+
 # Attempt to set up project imports.
 # This assumes the script is run in an environment where 'tensordirectory' package is accessible.
 # For example, running `python -m tensordirectory.main` from the project root,
@@ -23,20 +39,22 @@ try:
     from tensordirectory.storage import _initialize_hdf5, HDF5_FILE_NAME
 except ImportError as e:
     # Provide a helpful message if imports fail, common in complex project structures.
-    logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
-    logging.error(f"Failed to import TensorDirectory modules: {e}")
-    logging.error("Please ensure the project is installed correctly or PYTHONPATH is set up.")
-    logging.error("Try running as a module: `python -m tensordirectory.main` from the project root.")
+    # Ensure logging is configured if it hits here first, especially if the external dep check didn't run/error.
+    logging.basicConfig(stream=sys.stdout, level=logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger_proj_import_check = logging.getLogger("TensorDirectoryInitCheck")
+    logger_proj_import_check.error(f"Failed to import TensorDirectory modules: {e}")
+    logger_proj_import_check.error("Please ensure the project is installed correctly or PYTHONPATH is set up.")
+    logger_proj_import_check.error("Try running as a module: `python -m tensordirectory.main` from the project root.")
     sys.exit(1)
 
-# Configure basic logging
-# MCP server itself will also have logging, this is for main.py specific messages.
+# Configure basic logging for the rest of the application
+# This will be used if the above checks pass.
 logging.basicConfig(
-    stream=sys.stdout,
+    stream=sys.stdout, 
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) # This logger is for the main function and subsequent operations.
 
 
 def main():
