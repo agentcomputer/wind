@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorDirectory API Playground</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>TensorDirectory API Playground</h1>
+    </header>
+
+    <div class="container">
+        <div class="controls-panel">
+            <div class="form-group">
+                <label for="api-tool-select">Select API Tool:</label>
+                <select id="api-tool-select" name="api_tool">
+                    <option value="">-- Select a Tool --</option>
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+
+            <div id="parameter-form-container">
+                <!-- Parameters form will be dynamically generated here -->
+                <p>Select an API tool to see its parameters.</p>
+            </div>
+
+            <div class="demo-data-section">
+                <!-- Demo data options will appear here, populated by JS -->
+                <div id="demo-data-selector">
+                    <p>Options for loading demo data will appear here.</p>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 25px;"> {/* Increased top margin */}
+                <button id="execute-tool-button" type="button">Execute Tool</button>
+            </div>
+        </div>
+
+        <div class="results-panel">
+            <div class="result-box">
+                <h3 class="section-title">MCP Request</h3>
+                <pre id="mcp-request-display">Request details will appear here...</pre>
+            </div>
+            <div class="result-box">
+                <h3 class="section-title">MCP Response</h3>
+                <pre id="mcp-response-display">Response details will appear here...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js" defer></script>
+</body>
+</html>

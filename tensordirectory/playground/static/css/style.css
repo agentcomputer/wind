@@ -1,0 +1,235 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0; /* Changed to 0, container will handle main padding */
+    background-color: #f0f2f5; /* Slightly different background for depth */
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-size: 16px; /* Base font size */
+}
+
+header {
+    background-color: #ffffff; /* White header */
+    padding: 15px 30px; /* Adjusted padding */
+    border-bottom: 1px solid #d1d1d1; /* Softer border */
+    margin-bottom: 0; /* Removed margin, container will space */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    z-index: 10; /* Keep header on top */
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.6em; /* Slightly reduced H1 */
+    color: #1c1e21; /* Darker, Facebook-like blue/black */
+}
+
+.container {
+    display: flex;
+    flex-grow: 1;
+    gap: 25px; /* Increased gap */
+    padding: 25px; /* Main content padding */
+    max-width: 1400px; /* Max width for very large screens */
+    width: 100%;
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.controls-panel {
+    width: 400px; /* Slightly wider controls */
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    align-self: flex-start;
+    height: fit-content; /* Panel only as tall as content */
+}
+
+.results-panel {
+    flex-grow: 1;
+    padding: 0; /* Padding will be on inner result boxes */
+    background-color: transparent; /* Results panel itself is just a container */
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: 25px; /* Gap between request and response boxes */
+}
+
+.result-box { /* New class for individual result areas */
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+
+.form-group {
+    margin-bottom: 18px; /* Slightly more space */
+}
+
+label {
+    display: block;
+    margin-bottom: 6px; /* More space for label */
+    font-weight: 500; /* Semi-bold labels */
+    font-size: 0.9em; /* Slightly smaller label */
+    color: #4b4f56; /* Softer label color */
+}
+
+label.required::after {
+    content: " *";
+    color: #fa383e; /* Brighter red */
+    font-weight: bold; /* Make asterisk bolder */
+}
+
+
+select, input[type="text"], input[type="number"], input[type="password"], input[type="email"], textarea {
+    width: 100%; /* Use 100% and box-sizing for easier width management */
+    padding: 10px 12px; /* Adjusted padding */
+    border: 1px solid #ccd0d5; /* Softer border color */
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 0.95em;
+    color: #1c1e21;
+    background-color: #f5f6f7; /* Light background for inputs */
+}
+input[type="checkbox"] { /* Specific styling for checkboxes */
+    width: auto; /* Override full width */
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+
+select:focus, input:focus, textarea:focus {
+    border-color: #007bff; /* Standard Bootstrap blue for focus */
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    outline: none;
+    background-color: #ffffff; /* White background on focus */
+}
+
+textarea {
+    min-height: 80px;
+    resize: vertical;
+    line-height: 1.5; /* Better readability for multiline text */
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    padding: 10px 15px; /* Standard button padding */
+    border-radius: 6px;
+    font-size: 0.95em;
+    transition: background-color 0.15s ease-in-out; /* Smooth transition */
+}
+
+button:hover {
+    background-color: #0069d9; /* Darker blue on hover */
+}
+
+button:disabled {
+    background-color: #b5b8bd; /* Softer disabled color */
+    color: #fdfdfd;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+pre {
+    background-color: #f0f2f5; /* Match body background or slightly lighter */
+    padding: 15px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; /* Common monospace stack */
+    font-size: 0.875em; /* Slightly smaller pre text */
+    line-height: 1.6; /* Better line spacing in pre */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border: 1px solid #d1d1d1; /* Subtle border */
+}
+
+pre.error-message {
+    color: #c7254e; /* Bootstrap danger text color */
+    background-color: #f9e8ea; /* Light pink background for errors */
+    border: 1px solid #f5c6cb; /* Pinkish border for errors */
+}
+
+.section-title { /* For titles above forms or result boxes */
+    font-size: 1.1em; /* Adjusted size */
+    margin-top: 0;
+    margin-bottom: 12px; /* Space below title */
+    color: #1c1e21;
+    border-bottom: 1px solid #e0e0e0; /* Softer border */
+    padding-bottom: 8px;
+    font-weight: 600; /* Bolder section titles */
+}
+
+#parameter-form-container {
+    border-top: 1px solid #e9e9eb; /* Visual separator */
+    margin-top: 20px;
+    padding-top: 20px;
+}
+.demo-data-section {
+     border-top: 1px solid #e9e9eb; /* Visual separator */
+    margin-top: 20px;
+    padding-top: 15px;
+}
+.demo-data-section > p { /* Style for the "Load Demo Data:" text */
+    font-size: 0.9em;
+    color: #4b4f56;
+    margin-bottom: 8px;
+}
+
+
+.demo-data-button {
+    background-color: #e4e6eb; /* Lighter gray for demo buttons */
+    color: #050505; /* Dark text for contrast */
+    margin-top: 8px;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.9em;
+    border: 1px solid #ccd0d5; /* Subtle border */
+}
+
+.demo-data-button:hover {
+    background-color: #d8dbdf; /* Slightly darker on hover */
+}
+
+/* Ensure checkbox label is clickable and aligned */
+.form-group div { /* Target the div wrapping checkbox and label */
+    display: flex;
+    align-items: center;
+}
+.form-group div label { /* Ensure label is not full width here */
+    width: auto;
+    margin-bottom: 0; /* Remove bottom margin for inline alignment */
+    margin-left: 4px; /* Space between checkbox and label text */
+    font-weight: normal; /* Normal weight for checkbox label */
+}
+label[for*="param-"] { /* General label styling from before */
+     display: block;
+     margin-bottom: 6px;
+     font-weight: 500;
+     font-size: 0.9em;
+     color: #4b4f56;
+}
+label[for*="param-"].required::after { /* Ensure required asterisk is on main label */
+    content: " *";
+    color: #fa383e;
+    font-weight: bold;
+}
+
+/* Adjustments for checkbox specific label inside the flex container */
+.form-group div label[for*="param-"] {
+    margin-bottom: 0; /* Reset margin for checkbox specific label */
+    font-weight: normal; /* Make checkbox label text normal weight */
+    color: #1c1e21; /* Standard text color for checkbox label */
+}
+.form-group div label[for*="param-"].required::after {
+    content: ""; /* Remove asterisk from the inner label if it was duplicated */
+}

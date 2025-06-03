@@ -115,3 +115,9 @@ TensorDirectory exposes its functionality through the Model Context Protocol (MC
 *   **Querying:** Use natural language to find tensors, models, or execute inference tasks.
 
 For detailed information on the available MCP resources, tools, their parameters, and example requests/responses, please refer to the [API.md](API.md) documentation.
+
+---
+
+## API Playground
+
+This project includes an interactive API Playground to easily test and explore the MCP API tools. For details on how to run and use it, please see the [API Playground Documentation](./PLAYGROUND.md).
