@@ -16,7 +16,7 @@ import sys
 # Check for critical external dependencies first
 try:
     import google.generativeai
-    import mcp.server.fastmcp 
+    import mcp.server.fastmcp
     # You can also import specific items if preferred, e.g.:
     # from google.generativeai import GenerativeModel
     # from mcp.server.fastmcp import FastMCP
@@ -50,7 +50,7 @@ except ImportError as e:
 # Configure basic logging for the rest of the application
 # This will be used if the above checks pass.
 logging.basicConfig(
-    stream=sys.stdout, 
+    stream=sys.stdout,
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
