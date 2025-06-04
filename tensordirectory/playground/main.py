@@ -39,28 +39,43 @@ async def get_api_tools():
     # Initialize source_iterable to an empty list by default.
     source_iterable = []
 
-    # Attempt 1: Prioritize mcp_server.tools (dict) based on OpenRouterAI mcp 1.9.2 comment
-    if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
-        print("Using mcp_server.tools.values() (from dict) as primary source.")
+    # Attempt 1: Use mcp_server.list_tools() method if available (based on new log feedback)
+    if hasattr(mcp_server, 'list_tools') and callable(getattr(mcp_server, 'list_tools')):
+        print("Using mcp_server.list_tools() method as primary source.")
+        try:
+            source_iterable = mcp_server.list_tools()
+            # Ensure it's a list, in case it returns some other iterable type
+            if not isinstance(source_iterable, list):
+                source_iterable = list(source_iterable)
+        except Exception as e:
+            print(f"Error calling mcp_server.list_tools(): {e}")
+            # Keep source_iterable empty so fallbacks are attempted
+            source_iterable = [] # Ensure it's empty on error
+
+    # Attempt 2: Fallback to mcp_server.tools (dict)
+    if not source_iterable and hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
+        print("Using mcp_server.tools.values() (from dict) as fallback.")
         source_iterable = list(mcp_server.tools.values()) # Ensure it's a list
-    # Attempt 2: Fallback to mcp_server.tool_definitions (list)
-    elif hasattr(mcp_server, 'tool_definitions') and isinstance(mcp_server.tool_definitions, list):
+    # Attempt 3: Fallback to mcp_server.tool_definitions (list)
+    elif not source_iterable and hasattr(mcp_server, 'tool_definitions') and isinstance(mcp_server.tool_definitions, list):
         print("Using mcp_server.tool_definitions (list) as fallback.")
         source_iterable = mcp_server.tool_definitions
-    # Attempt 3: Fallback to mcp_server.router.tools (list)
-    elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools') and isinstance(mcp_server.router.tools, list):
+    # Attempt 4: Fallback to mcp_server.router.tools (list)
+    elif not source_iterable and hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools') and isinstance(mcp_server.router.tools, list):
         print("Using mcp_server.router.tools (list) as fallback.")
         source_iterable = mcp_server.router.tools
-    else:
-        # If none of the known attributes exist or have the correct type, this is a configuration issue.
+
+    # If source_iterable is still empty after all attempts, then raise the error
+    if not source_iterable:
         mcp_server_attrs = [attr for attr in dir(mcp_server) if not attr.startswith('_')]
         router_attrs = []
         if hasattr(mcp_server, 'router'):
             router_attrs = [attr for attr in dir(mcp_server.router) if not attr.startswith('_')]
 
         log_message = (
-            "Critical: Could not find tool definitions on mcp_server. "
-            f"Checked for mcp_server.tools (dict), mcp_server.tool_definitions (list), mcp_server.router.tools (list). "
+            "Critical: Could not find tool definitions on mcp_server after trying all known methods. "
+            f"Checked for: mcp_server.list_tools() (callable), mcp_server.tools (dict), "
+            f"mcp_server.tool_definitions (list), mcp_server.router.tools (list). "
             f"Available attributes on mcp_server: {mcp_server_attrs}. "
             f"Available attributes on mcp_server.router (if exists): {router_attrs}."
         )
@@ -68,7 +83,7 @@ async def get_api_tools():
         raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool definitions. Check server logs for details.")
 
     # The rest of the function continues here, processing source_iterable
-    # Ensure tools_info_list = [] is initialized before the loop, which it already is.
+    # tools_info_list = [] is initialized at the beginning of the function.
     for tool_handler in source_iterable:
         tool_name = tool_handler.name
         description = tool_handler.description or tool_handler.fn.__doc__ or "No description available."
@@ -103,21 +118,45 @@ async def get_tool_schema(tool_name: str):
     """
     Returns the detailed JSON schema for a specific tool's arguments model.
     """
-    # Access tool definition via mcp_server.tools_by_name
-    if not hasattr(mcp_server, 'tools_by_name') or not isinstance(mcp_server.tools_by_name, dict):
-        # Fallback if the direct attribute doesn't exist, though the prompt implies it should.
-        print("Error: mcp_server.tools_by_name is not a dict or does not exist. Using mcp_server.tools as fallback if available, or router.")
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
-            tool_definition = mcp_server.tools.get(tool_name)
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
-            tool_definition = mcp_server.router.tools_by_name.get(tool_name)
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool lookups.")
-    else:
+    tool_definition = None
+
+    # Attempt 1: Use mcp_server.tool(tool_name) if available
+    if hasattr(mcp_server, 'tool') and callable(getattr(mcp_server, 'tool')):
+        print(f"Attempting to get tool '{tool_name}' schema using mcp_server.tool().")
+        try:
+            tool_definition = mcp_server.tool(tool_name)
+            if not tool_definition: # Explicitly check if mcp_server.tool() returned None
+                 print(f"mcp_server.tool('{tool_name}') returned None.")
+        except Exception as e:
+            print(f"Call to mcp_server.tool('{tool_name}') failed: {e}")
+            # tool_definition remains None, fallbacks will be attempted.
+
+    # Attempt 2: Fallback to mcp_server.tools_by_name (dict)
+    if not tool_definition and hasattr(mcp_server, 'tools_by_name') and isinstance(mcp_server.tools_by_name, dict):
+        print(f"Attempting to get tool '{tool_name}' schema using mcp_server.tools_by_name.")
         tool_definition = mcp_server.tools_by_name.get(tool_name)
 
+    # Attempt 3: Fallback to mcp_server.tools (dict)
+    if not tool_definition and hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
+        print(f"Attempting to get tool '{tool_name}' schema using mcp_server.tools.get().")
+        tool_definition = mcp_server.tools.get(tool_name)
+
+    # Attempt 4: Fallback to mcp_server.router.tools_by_name (dict)
+    if not tool_definition and hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
+        print(f"Attempting to get tool '{tool_name}' schema using mcp_server.router.tools_by_name.")
+        tool_definition = mcp_server.router.tools_by_name.get(tool_name)
+
+    # After all attempts, check if tool_definition was found
     if not tool_definition:
-        raise HTTPException(status_code=404, detail="Tool not found")
+        mcp_server_attrs = [attr for attr in dir(mcp_server) if not attr.startswith('_')]
+        log_message = (
+            f"Critical: Tool '{tool_name}' for schema not found on mcp_server after trying all known methods. "
+            f"Checked for: mcp_server.tool(), mcp_server.tools_by_name (dict), "
+            f"mcp_server.tools (dict), mcp_server.router.tools_by_name (dict). "
+            f"Available attributes on mcp_server: {mcp_server_attrs}."
+        )
+        print(log_message)
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found or server misconfigured for schema retrieval. Check server logs.")
 
     if hasattr(tool_definition, 'model') and tool_definition.model:
         return JSONResponse(content=tool_definition.model.schema())
@@ -140,27 +179,48 @@ class ExecuteToolRequest(BaseModel):
 
 @app.post("/api/execute_tool")
 async def execute_tool_endpoint(request_data: ExecuteToolRequest):
-    tool_name = request_data.tool_name
-    args = request_data.args
+    tool_name = request_data.tool_name # Ensure tool_name is defined from request_data
+    args = request_data.args # Ensure args is defined
 
     tool_definition = None
-    # Access tool definition via mcp_server.tools_by_name
-    if not hasattr(mcp_server, 'tools_by_name') or not isinstance(mcp_server.tools_by_name, dict):
-        print("Error: mcp_server.tools_by_name is not a dict or does not exist. Using mcp_server.tools as fallback if available, or router.")
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict): # Fallback
-            tool_definition = mcp_server.tools.get(tool_name)
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
-            tool_definition = mcp_server.router.tools_by_name.get(tool_name)
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool lookups for execution.")
-    else:
-         if tool_name not in mcp_server.tools_by_name: # Check existence
-            raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found via tools_by_name.")
-         tool_definition = mcp_server.tools_by_name[tool_name]
 
+    # Attempt 1: Use mcp_server.tool(tool_name) if available
+    if hasattr(mcp_server, 'tool') and callable(getattr(mcp_server, 'tool')):
+        print(f"Attempting to get tool '{tool_name}' for execution using mcp_server.tool().")
+        try:
+            tool_definition = mcp_server.tool(tool_name)
+            if not tool_definition: # Explicitly check if mcp_server.tool() returned None
+                 print(f"mcp_server.tool('{tool_name}') returned None.")
+        except Exception as e:
+            print(f"Call to mcp_server.tool('{tool_name}') failed: {e}")
+            # tool_definition remains None, fallbacks will be attempted.
 
-    if not tool_definition: # Should be caught by the check above if tools_by_name exists
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found.")
+    # Attempt 2: Fallback to mcp_server.tools_by_name (dict)
+    if not tool_definition and hasattr(mcp_server, 'tools_by_name') and isinstance(mcp_server.tools_by_name, dict):
+        print(f"Attempting to get tool '{tool_name}' for execution using mcp_server.tools_by_name.")
+        tool_definition = mcp_server.tools_by_name.get(tool_name) # Use .get() for consistency
+
+    # Attempt 3: Fallback to mcp_server.tools (dict)
+    if not tool_definition and hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
+        print(f"Attempting to get tool '{tool_name}' for execution using mcp_server.tools.get().")
+        tool_definition = mcp_server.tools.get(tool_name)
+
+    # Attempt 4: Fallback to mcp_server.router.tools_by_name (dict)
+    if not tool_definition and hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools_by_name') and isinstance(mcp_server.router.tools_by_name, dict):
+        print(f"Attempting to get tool '{tool_name}' for execution using mcp_server.router.tools_by_name.")
+        tool_definition = mcp_server.router.tools_by_name.get(tool_name)
+
+    # After all attempts, check if tool_definition was found
+    if not tool_definition:
+        mcp_server_attrs = [attr for attr in dir(mcp_server) if not attr.startswith('_')]
+        log_message = (
+            f"Critical: Tool '{tool_name}' for execution not found on mcp_server after trying all known methods. "
+            f"Checked for: mcp_server.tool(), mcp_server.tools_by_name (dict), "
+            f"mcp_server.tools (dict), mcp_server.router.tools_by_name (dict). "
+            f"Available attributes on mcp_server: {mcp_server_attrs}."
+        )
+        print(log_message)
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found or server misconfigured for execution. Check server logs.")
 
     try:
         result = await tool_definition.execute_tool(args)
