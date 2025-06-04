@@ -41,14 +41,15 @@ async def get_api_tools():
 
     # Attempt 1: Use mcp_server.list_tools() method if available (based on new log feedback)
     if hasattr(mcp_server, 'list_tools') and callable(getattr(mcp_server, 'list_tools')):
-        print("Using mcp_server.list_tools() method as primary source.")
+        print("Using async mcp_server.list_tools() method as primary source.")
         try:
-            source_iterable = mcp_server.list_tools()
+            source_iterable = await mcp_server.list_tools() # <--- ADDED AWAIT
             # Ensure it's a list, in case it returns some other iterable type
             if not isinstance(source_iterable, list):
+                print(f"mcp_server.list_tools() returned type {type(source_iterable)}, converting to list.")
                 source_iterable = list(source_iterable)
         except Exception as e:
-            print(f"Error calling mcp_server.list_tools(): {e}")
+            print(f"Error calling await mcp_server.list_tools(): {e}")
             # Keep source_iterable empty so fallbacks are attempted
             source_iterable = [] # Ensure it's empty on error
 
@@ -122,13 +123,13 @@ async def get_tool_schema(tool_name: str):
 
     # Attempt 1: Use mcp_server.tool(tool_name) if available
     if hasattr(mcp_server, 'tool') and callable(getattr(mcp_server, 'tool')):
-        print(f"Attempting to get tool '{tool_name}' schema using mcp_server.tool().")
+        print(f"Attempting to get tool '{tool_name}' schema using async mcp_server.tool().")
         try:
-            tool_definition = mcp_server.tool(tool_name)
+            tool_definition = await mcp_server.tool(tool_name) # <--- ADDED AWAIT
             if not tool_definition: # Explicitly check if mcp_server.tool() returned None
-                 print(f"mcp_server.tool('{tool_name}') returned None.")
+                 print(f"await mcp_server.tool('{tool_name}') returned None.")
         except Exception as e:
-            print(f"Call to mcp_server.tool('{tool_name}') failed: {e}")
+            print(f"Call to await mcp_server.tool('{tool_name}') failed: {e}")
             # tool_definition remains None, fallbacks will be attempted.
 
     # Attempt 2: Fallback to mcp_server.tools_by_name (dict)
@@ -186,13 +187,13 @@ async def execute_tool_endpoint(request_data: ExecuteToolRequest):
 
     # Attempt 1: Use mcp_server.tool(tool_name) if available
     if hasattr(mcp_server, 'tool') and callable(getattr(mcp_server, 'tool')):
-        print(f"Attempting to get tool '{tool_name}' for execution using mcp_server.tool().")
+        print(f"Attempting to get tool '{tool_name}' for execution using async mcp_server.tool().")
         try:
-            tool_definition = mcp_server.tool(tool_name)
+            tool_definition = await mcp_server.tool(tool_name) # <--- ADDED AWAIT
             if not tool_definition: # Explicitly check if mcp_server.tool() returned None
-                 print(f"mcp_server.tool('{tool_name}') returned None.")
+                 print(f"await mcp_server.tool('{tool_name}') returned None.")
         except Exception as e:
-            print(f"Call to mcp_server.tool('{tool_name}') failed: {e}")
+            print(f"Call to await mcp_server.tool('{tool_name}') failed: {e}")
             # tool_definition remains None, fallbacks will be attempted.
 
     # Attempt 2: Fallback to mcp_server.tools_by_name (dict)
