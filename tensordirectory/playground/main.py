@@ -36,23 +36,39 @@ async def get_api_tools():
     """
     tools_info_list = []
 
-    # Check if mcp_server has tool_definitions as per instruction for iteration
-    if not hasattr(mcp_server, 'tool_definitions') or not isinstance(mcp_server.tool_definitions, list):
-        # This indicates the attribute is not what's expected.
-        # For the OpenRouterAI mcp package, tools are in mcp_server.tools (dict)
-        # or mcp_server.router.tools (list via router)
-        # However, strictly following the prompt to use mcp_server.tool_definitions:
-        print("Error: mcp_server.tool_definitions is not a list or does not exist. Using mcp_server.tools.values() as fallback for now if available, or router.")
-        source_iterable = []
-        if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
-            source_iterable = mcp_server.tools.values()
-        elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools') and isinstance(mcp_server.router.tools, list):
-             source_iterable = mcp_server.router.tools
-        else:
-            raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool definitions.")
-    else:
-        source_iterable = mcp_server.tool_definitions
+    # Initialize source_iterable to an empty list by default.
+    source_iterable = []
 
+    # Attempt 1: Prioritize mcp_server.tools (dict) based on OpenRouterAI mcp 1.9.2 comment
+    if hasattr(mcp_server, 'tools') and isinstance(mcp_server.tools, dict):
+        print("Using mcp_server.tools.values() (from dict) as primary source.")
+        source_iterable = list(mcp_server.tools.values()) # Ensure it's a list
+    # Attempt 2: Fallback to mcp_server.tool_definitions (list)
+    elif hasattr(mcp_server, 'tool_definitions') and isinstance(mcp_server.tool_definitions, list):
+        print("Using mcp_server.tool_definitions (list) as fallback.")
+        source_iterable = mcp_server.tool_definitions
+    # Attempt 3: Fallback to mcp_server.router.tools (list)
+    elif hasattr(mcp_server, 'router') and hasattr(mcp_server.router, 'tools') and isinstance(mcp_server.router.tools, list):
+        print("Using mcp_server.router.tools (list) as fallback.")
+        source_iterable = mcp_server.router.tools
+    else:
+        # If none of the known attributes exist or have the correct type, this is a configuration issue.
+        mcp_server_attrs = [attr for attr in dir(mcp_server) if not attr.startswith('_')]
+        router_attrs = []
+        if hasattr(mcp_server, 'router'):
+            router_attrs = [attr for attr in dir(mcp_server.router) if not attr.startswith('_')]
+
+        log_message = (
+            "Critical: Could not find tool definitions on mcp_server. "
+            f"Checked for mcp_server.tools (dict), mcp_server.tool_definitions (list), mcp_server.router.tools (list). "
+            f"Available attributes on mcp_server: {mcp_server_attrs}. "
+            f"Available attributes on mcp_server.router (if exists): {router_attrs}."
+        )
+        print(log_message) # This will go to server logs
+        raise HTTPException(status_code=500, detail="Server configuration error: Cannot find tool definitions. Check server logs for details.")
+
+    # The rest of the function continues here, processing source_iterable
+    # Ensure tools_info_list = [] is initialized before the loop, which it already is.
     for tool_handler in source_iterable:
         tool_name = tool_handler.name
         description = tool_handler.description or tool_handler.fn.__doc__ or "No description available."
